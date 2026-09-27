@@ -1,0 +1,6 @@
+{
+  "name": "KSA Accounting & ERP Software",
+  "description": "A comprehensive, bilingual (English/Arabic) Saudi VAT and ZATCA compliant Cloud Accounting and ERP solution. Features invoicing with compliant TLV QR codes, inventory, supplier/customer ledgers, expenses, chart of accounts, and financial statement reports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

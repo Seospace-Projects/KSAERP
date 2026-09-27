@@ -1,0 +1,52 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Tajawal:wght@300;400;500;700;800;900&family=Fira+Code:wght@400;500;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Tajawal", system-ui, sans-serif;
+  --font-serif: "Tajawal", "Inter", system-ui, sans-serif;
+  --font-serif-elegant: "Playfair Display", Georgia, serif;
+  --font-mono: "Fira Code", monospace;
+}
+
+.font-serif-elegant {
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+/* Custom print adjustments for A4 invoices */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  aside, header, #language-toggle-btn, button {
+    display: none !important;
+  }
+  #invoice-printable-area {
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+  #barcode-label {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 auto !important;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
