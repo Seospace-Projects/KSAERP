@@ -198,6 +198,8 @@ GRANT EXECUTE ON FUNCTION public.touch_last_login() TO authenticated;
     grants,
     `GRANT USAGE ON SCHEMA public TO authenticated, anon;`,
     `CREATE INDEX IF NOT EXISTS invoices_number_idx ON public.invoices (invoice_number);`,
+    `CREATE INDEX IF NOT EXISTS invoices_date_idx ON public.invoices (date);`,
+    `CREATE INDEX IF NOT EXISTS invoices_company_id_idx ON public.invoices (company_id);`,
     `CREATE INDEX IF NOT EXISTS reserved_invoices_company_idx ON public.reserved_invoices (company_id);`,
     `CREATE INDEX IF NOT EXISTS profiles_username_idx ON public.profiles (lower(username));`,
     `NOTIFY pgrst, 'reload schema';`,

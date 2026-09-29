@@ -17,7 +17,8 @@ import {
   Sparkles,
   RefreshCw,
   Eye,
-  Settings
+  Settings,
+  X
 } from 'lucide-react';
 import { translations, generateZatcaTlvQr, validateZatcaCompliance } from '../utils';
 import { ConfirmModal } from './ConfirmModal';
@@ -302,8 +303,14 @@ export default function SalesInvoiceView({
   // Component States
   const [activeTab, setActiveTab] = useState<'list' | 'create'>(pendingUseReserved ? 'create' : 'list');
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(invoices[0] || null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const invCompany = selectedInvoice?.companyDetails || company;
-  const [searchQuery, setSearchQuery] = useState('');
+  const [filterInvoiceNumber, setFilterInvoiceNumber] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState('');
+  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterCompanyId, setFilterCompanyId] = useState('');
+  const [filterCustomer, setFilterCustomer] = useState('');
+  const [filterInvoiceType, setFilterInvoiceType] = useState<'All' | 'Standard' | 'Simplified'>('All');
   
   // Invoice Form State
   const [selectedCompanyId, setSelectedCompanyId] = useState(pendingUseReserved?.companyId || company.id || 'comp-1');
@@ -312,6 +319,7 @@ export default function SalesInvoiceView({
   const [selectedWarehouseId, setSelectedWarehouseId] = useState(warehouses[0]?.id || '');
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Credit' | 'Bank Transfer' | 'Mada' | 'Visa' | 'Mastercard'>('Cash');
   const [invoiceDate, setInvoiceDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [dueDate, setDueDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [manualInvoiceNumber, setManualInvoiceNumber] = useState(pendingUseReserved?.invoiceNumber || '');
   const [isManualNumberEdited, setIsManualNumberEdited] = useState(!!pendingUseReserved);
   const [notes, setNotes] = useState('');
@@ -587,6 +595,11 @@ export default function SalesInvoiceView({
       return;
     }
 
+    if (dueDate < invoiceDate) {
+      alert(lang === 'en' ? "Due date cannot be before invoice date" : "تاريخ الاستحقاق لا يمكن أن يكون قبل تاريخ الفاتورة");
+      return;
+    }
+
     const customer = customers.find(c => c.id === selectedCustomerId)!;
     const dateStr = invoiceDate;
     const now = new Date();
@@ -645,6 +658,7 @@ export default function SalesInvoiceView({
       invoiceNumber: finalInvoiceNumber,
       invoiceType,
       date: dateStr,
+      dueDate,
       customerId: customer.id,
       customerNameEn: customer.nameEn,
       customerNameAr: customer.nameAr,
@@ -663,7 +677,10 @@ export default function SalesInvoiceView({
       notes,
       timestamp: timestampStr,
       qrCodeTlv,
-      companyDetails: selectedCompany
+      companyDetails: selectedCompany,
+      companyId: selectedCompany.id,
+      companyNameEn: selectedCompany.nameEn,
+      companyNameAr: selectedCompany.nameAr,
     };
 
     // Update state
@@ -765,7 +782,9 @@ export default function SalesInvoiceView({
     setSelectedCustomerId('');
     setItems([{ productId: '', qty: 1, unitPrice: 0 }]);
     setNotes('');
-    setInvoiceDate(new Date().toISOString().split('T')[0]);
+    const today = new Date().toISOString().split('T')[0];
+    setInvoiceDate(today);
+    setDueDate(today);
     setManualInvoiceNumber('');
     setIsManualNumberEdited(false);
     setSelectedInvoice(newInvoice);
@@ -885,17 +904,128 @@ export default function SalesInvoiceView({
     });
   };
 
+  const handlePrintInvoice = () => {
+    if (!selectedInvoice) return;
+    const printContent = document.getElementById('printable-a4-area');
+    if (!printContent) return;
+    const printWindow = window.open(
+      'about:blank',
+      String(Date.now()),
+      'left=50,top=50,width=850,height=950,toolbar=0,scrollbars=1,status=0'
+    );
+    if (!printWindow) return;
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>${selectedInvoice.invoiceNumber}</title>
+          <script src="https://cdn.tailwindcss.com"><\/script>
+          <script>
+            tailwind.config = {
+              theme: {
+                extend: {
+                  colors: { blue: { 850: '#1e3a8a' } },
+                  fontFamily: {
+                    sans: ['Inter', 'Tajawal', 'Cairo', 'sans-serif'],
+                    mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+                  }
+                }
+              }
+            }
+          <\/script>
+          <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;600;700&display=swap');
+            * { box-sizing: border-box; }
+            body {
+              font-family: 'Inter', 'Tajawal', 'Cairo', sans-serif;
+              margin: 0; padding: 0; background: #ffffff; color: #0f172a;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .font-serif-elegant { font-family: 'Playfair Display', Georgia, serif !important; }
+            @media print {
+              @page { size: A4 portrait; margin: 12mm 15mm 12mm 15mm; }
+              body { background: #ffffff; }
+              #printable-a4-area {
+                min-height: 0 !important; height: auto !important; padding: 0 !important;
+                border: none !important; box-shadow: none !important;
+                max-width: 100% !important; width: 100% !important;
+              }
+              table { page-break-inside: avoid; }
+              tr { page-break-inside: avoid; }
+            }
+          </style>
+        </head>
+        <body>
+          ${printContent.innerHTML}
+          <script>
+            window.onload = function() {
+              setTimeout(function() { window.print(); window.close(); }, 500);
+            }
+          <\/script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  const getInvoiceCompanyId = (inv: Invoice) =>
+    inv.companyId || inv.companyDetails?.id || '';
+
+
+  const getInvoiceCompanyName = (inv: Invoice) => {
+    if (lang === 'en') {
+      return inv.companyNameEn || inv.companyDetails?.nameEn || '';
+    }
+    return inv.companyNameAr || inv.companyDetails?.nameAr || inv.companyNameEn || inv.companyDetails?.nameEn || '';
+  };
+
+  const openInvoicePreview = (inv: Invoice) => {
+    setSelectedInvoice(inv);
+    setShowPreviewModal(true);
+  };
+
+  const clearRegistryFilters = () => {
+    setFilterInvoiceNumber('');
+    setFilterDateFrom('');
+    setFilterDateTo('');
+    setFilterCompanyId('');
+    setFilterCustomer('');
+    setFilterInvoiceType('All');
+  };
+
+  const recentInvoices = [...invoices]
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id))
+    .slice(0, 3);
+
   const filteredInvoices = invoices.filter(inv => {
-    const matchSearch = inv.invoiceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        inv.customerNameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                        inv.customerNameAr.includes(searchQuery);
-    return matchSearch;
-  });
+    const numberQ = filterInvoiceNumber.trim().toLowerCase();
+    if (numberQ && !inv.invoiceNumber.toLowerCase().includes(numberQ)) return false;
+
+    if (filterDateFrom && inv.date < filterDateFrom) return false;
+    if (filterDateTo && inv.date > filterDateTo) return false;
+
+    if (filterCompanyId) {
+      const invCompanyId = getInvoiceCompanyId(inv);
+      if (invCompanyId !== filterCompanyId) return false;
+    }
+
+    const customerQ = filterCustomer.trim().toLowerCase();
+    if (customerQ) {
+      const matchCustomer =
+        inv.customerNameEn.toLowerCase().includes(customerQ)
+        || inv.customerNameAr.toLowerCase().includes(customerQ);
+      if (!matchCustomer) return false;
+    }
+
+    if (filterInvoiceType !== 'All' && inv.invoiceType !== filterInvoiceType) return false;
+
+    return true;
+  }).sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6" id="invoice-module-container">
       {/* LEFT COLUMN: Controls, list, or Creation Form */}
-      <div className="xl:col-span-7 flex flex-col space-y-4">
+      <div className={`${activeTab === 'list' ? 'xl:col-span-12' : 'xl:col-span-7'} flex flex-col space-y-4`}>
         
         {/* Toggle Panel Header */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between">
@@ -931,95 +1061,253 @@ export default function SalesInvoiceView({
           </div>
         </div>
 
-        {/* Tab 1: Invoice List */}
+        {/* Tab 1: Invoice Registry */}
         {activeTab === 'list' && (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-slate-900 text-base">
-                {lang === 'en' ? "Audit-Ready Tax Invoices" : "الفواتير الضريبية المعتمدة للمراجعة"}
-              </h3>
-              <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
-                {filteredInvoices.length} {lang === 'en' ? 'Invoices' : 'فواتير'}
-              </span>
-            </div>
+          <div className="space-y-4">
+            {/* Audit-Ready — last 3 invoices only */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-base">
+                  {lang === 'en' ? "Audit-Ready Tax Invoices" : "الفواتير الضريبية المعتمدة للمراجعة"}
+                </h3>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                  {lang === 'en' ? 'Last 3' : 'آخر 3'}
+                </span>
+              </div>
 
-            {/* Search */}
-            <div className="relative">
-              <Search className={`absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'} w-4 h-4 text-slate-400`} />
-              <input
-                type="text"
-                placeholder={t.search}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full py-2 ${isRtl ? 'pr-9 pl-4 text-right' : 'pl-9 pr-4'} text-xs bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20`}
-              />
-            </div>
-
-            {/* Invoices List Table */}
-            <div className="overflow-y-auto max-h-[500px] border border-slate-200 rounded-xl">
-              {filteredInvoices.length === 0 ? (
-                <div className="text-center py-12 text-slate-400 text-xs">
-                  {lang === 'en' ? "No invoices found." : "لا توجد فواتير مطابقة."}
+              {recentInvoices.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-xs">
+                  {lang === 'en' ? "No invoices issued yet." : "لا توجد فواتير صادرة بعد."}
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100">
-                  {filteredInvoices.map(inv => (
-                    <div 
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  {recentInvoices.map(inv => (
+                    <div
                       key={inv.id}
-                      onClick={() => setSelectedInvoice(inv)}
-                      className={`p-4 flex items-center justify-between cursor-pointer transition-colors ${
-                        selectedInvoice?.id === inv.id ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50/50'
-                      }`}
+                      className="border border-slate-200 rounded-xl p-3 space-y-2 hover:border-blue-200 transition-colors"
                     >
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-slate-800 text-xs">{inv.invoiceNumber}</span>
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                            inv.invoiceType === 'Standard' 
-                              ? 'bg-blue-50 text-blue-600' 
-                              : 'bg-emerald-50 text-emerald-600'
-                          }`}>
-                            {inv.invoiceType === 'Standard' ? t.standard : t.simplified}
-                          </span>
-                          {inv.isReturned && (
-                            <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[9px] font-bold">
-                              {lang === 'en' ? "Returned (CN)" : "مرتجع (إشعار دائن)"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                          <span className="truncate max-w-[150px]">
-                            {lang === 'en' ? inv.customerNameEn : inv.customerNameAr}
-                          </span>
-                          <span>•</span>
-                          <span>{inv.date}</span>
-                        </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-bold text-slate-800 text-xs truncate">{inv.invoiceNumber}</span>
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                          inv.invoiceType === 'Standard'
+                            ? 'bg-blue-50 text-blue-600'
+                            : 'bg-emerald-50 text-emerald-600'
+                        }`}>
+                          {inv.invoiceType === 'Standard' ? t.standard : t.simplified}
+                        </span>
                       </div>
-
-                      <div className={`flex items-center gap-3 ${isRtl ? 'mr-4' : 'ml-4'}`}>
-                        <div className="text-right">
-                          <span className={`font-mono text-xs font-bold block ${inv.isReturned ? 'text-rose-600 line-through' : 'text-slate-950'}`}>
-                            {inv.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}
-                          </span>
-                          <span className="text-[9px] text-slate-400 block font-mono">
-                            {inv.paymentMethod}
-                          </span>
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteInvoice(inv.id);
-                          }}
-                          className="p-1.5 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                          title={lang === 'en' ? "Delete Invoice" : "حذف الفاتورة"}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="text-[10px] text-slate-500 truncate">
+                        {lang === 'en' ? inv.customerNameEn : inv.customerNameAr}
                       </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-slate-400 font-mono">{inv.date}</span>
+                        <span className={`font-mono font-bold ${inv.isReturned ? 'text-rose-600 line-through' : 'text-slate-900'}`}>
+                          {inv.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => openInvoicePreview(inv)}
+                        className="w-full mt-1 py-1.5 text-[10px] font-bold rounded-lg bg-slate-900 text-white hover:bg-slate-800 flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <Eye className="w-3 h-3" />
+                        {lang === 'en' ? 'View' : 'عرض'}
+                      </button>
                     </div>
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Full registry table with filters */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm">
+                  {lang === 'en' ? "Invoice Registry Records" : "سجلات سجل الفواتير"}
+                </h3>
+                <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-bold">
+                  {filteredInvoices.length} {lang === 'en' ? 'Records' : 'سجل'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 text-xs">
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">
+                    {lang === 'en' ? 'Invoice Number' : 'رقم الفاتورة'}
+                  </label>
+                  <div className="relative">
+                    <Search className={`absolute top-2.5 ${isRtl ? 'right-2.5' : 'left-2.5'} w-3.5 h-3.5 text-slate-400`} />
+                    <input
+                      type="text"
+                      value={filterInvoiceNumber}
+                      onChange={(e) => setFilterInvoiceNumber(e.target.value)}
+                      placeholder={lang === 'en' ? 'Search number…' : 'بحث بالرقم…'}
+                      className={`w-full py-2 ${isRtl ? 'pr-8 pl-2' : 'pl-8 pr-2'} bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20`}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">
+                    {lang === 'en' ? 'Date From' : 'من تاريخ'}
+                  </label>
+                  <input
+                    type="date"
+                    value={filterDateFrom}
+                    onChange={(e) => setFilterDateFrom(e.target.value)}
+                    className="w-full py-2 px-2 bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">
+                    {lang === 'en' ? 'Date To' : 'إلى تاريخ'}
+                  </label>
+                  <input
+                    type="date"
+                    value={filterDateTo}
+                    onChange={(e) => setFilterDateTo(e.target.value)}
+                    className="w-full py-2 px-2 bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">
+                    {lang === 'en' ? 'Company' : 'الشركة'}
+                  </label>
+                  <select
+                    value={filterCompanyId}
+                    onChange={(e) => setFilterCompanyId(e.target.value)}
+                    className="w-full py-2 px-2 bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <option value="">{lang === 'en' ? 'All companies' : 'كل الشركات'}</option>
+                    {(companies.length ? companies : [company]).map(c => (
+                      <option key={c.id} value={c.id}>
+                        {lang === 'en' ? c.nameEn : c.nameAr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">
+                    {lang === 'en' ? 'Customer' : 'العميل'}
+                  </label>
+                  <input
+                    type="text"
+                    value={filterCustomer}
+                    onChange={(e) => setFilterCustomer(e.target.value)}
+                    placeholder={lang === 'en' ? 'Customer name…' : 'اسم العميل…'}
+                    className="w-full py-2 px-2 bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-500 font-semibold mb-1">
+                    {lang === 'en' ? 'Invoice Type' : 'نوع الفاتورة'}
+                  </label>
+                  <div className="flex gap-2">
+                    <select
+                      value={filterInvoiceType}
+                      onChange={(e) => setFilterInvoiceType(e.target.value as 'All' | 'Standard' | 'Simplified')}
+                      className="flex-1 py-2 px-2 bg-slate-100 border-none rounded-xl focus:outline-hidden focus:ring-2 focus:ring-blue-500/20"
+                    >
+                      <option value="All">{lang === 'en' ? 'All types' : 'كل الأنواع'}</option>
+                      <option value="Simplified">{t.simplified}</option>
+                      <option value="Standard">{t.standard}</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={clearRegistryFilters}
+                      className="px-2.5 py-2 rounded-xl bg-slate-200 text-slate-700 font-bold hover:bg-slate-300 cursor-pointer"
+                      title={lang === 'en' ? 'Clear filters' : 'مسح الفلاتر'}
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-200 rounded-xl max-h-[520px] overflow-y-auto">
+                <table className="w-full text-xs text-start min-w-[900px]">
+                  <thead className="bg-slate-50 sticky top-0 z-10">
+                    <tr className="text-[10px] uppercase tracking-wide text-slate-500">
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Invoice #' : 'رقم الفاتورة'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Date' : 'التاريخ'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Due Date' : 'الاستحقاق'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Company' : 'الشركة'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Customer' : 'العميل'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Type' : 'النوع'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Payment' : 'الدفع'}</th>
+                      <th className="px-3 py-2.5 font-bold text-end">{lang === 'en' ? 'Total' : 'الإجمالي'}</th>
+                      <th className="px-3 py-2.5 font-bold">{lang === 'en' ? 'Status' : 'الحالة'}</th>
+                      <th className="px-3 py-2.5 font-bold text-center">{lang === 'en' ? 'Actions' : 'إجراءات'}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredInvoices.length === 0 ? (
+                      <tr>
+                        <td colSpan={10} className="px-3 py-12 text-center text-slate-400">
+                          {lang === 'en' ? 'No invoices match the current filters.' : 'لا توجد فواتير مطابقة للفلاتر الحالية.'}
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredInvoices.map(inv => (
+                        <tr key={inv.id} className="hover:bg-slate-50/80">
+                          <td className="px-3 py-2.5 font-mono font-bold text-slate-800">{inv.invoiceNumber}</td>
+                          <td className="px-3 py-2.5 font-mono text-slate-600">{inv.date}</td>
+                          <td className="px-3 py-2.5 font-mono text-slate-600">{inv.dueDate || inv.date}</td>
+                          <td className="px-3 py-2.5 text-slate-700 max-w-[140px] truncate" title={getInvoiceCompanyName(inv)}>
+                            {getInvoiceCompanyName(inv) || '—'}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-700 max-w-[140px] truncate">
+                            {lang === 'en' ? inv.customerNameEn : inv.customerNameAr}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                              inv.invoiceType === 'Standard'
+                                ? 'bg-blue-50 text-blue-600'
+                                : 'bg-emerald-50 text-emerald-600'
+                            }`}>
+                              {inv.invoiceType === 'Standard' ? t.standard : t.simplified}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-600">{inv.paymentMethod}</td>
+                          <td className={`px-3 py-2.5 font-mono font-bold text-end ${inv.isReturned ? 'text-rose-600 line-through' : 'text-slate-900'}`}>
+                            {inv.total.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {inv.isReturned ? (
+                              <span className="bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                {lang === 'en' ? 'Returned' : 'مرتجع'}
+                              </span>
+                            ) : (
+                              <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[9px] font-bold">
+                                {lang === 'en' ? 'Active' : 'نشط'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => openInvoicePreview(inv)}
+                                className="p-1.5 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
+                                title={lang === 'en' ? 'View' : 'عرض'}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteInvoice(inv.id)}
+                                className="p-1.5 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                                title={lang === 'en' ? 'Delete Invoice' : 'حذف الفاتورة'}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1034,8 +1322,8 @@ export default function SalesInvoiceView({
               </h3>
             </div>
 
-            {/* Quick Header Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+            {/* Quick Header Grid — 9 fields, 3 per row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
               <div>
                 <label className="block text-indigo-600 font-bold mb-1">
                   {lang === 'en' ? "Issue from Company *" : "إصدار من شركة *"}
@@ -1096,9 +1384,7 @@ export default function SalesInvoiceView({
                   ))}
                 </select>
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
               <div>
                 <label className="block text-slate-500 font-semibold mb-1">{t.paymentMethod}</label>
                 <select
@@ -1113,19 +1399,6 @@ export default function SalesInvoiceView({
                   <option value="Visa">Visa (فيزا)</option>
                   <option value="Mastercard">Mastercard (ماستركارد)</option>
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-500 font-semibold mb-1">
-                  {lang === 'en' ? "Invoice Date *" : "تاريخ الفاتورة *"}
-                </label>
-                <input
-                  type="date"
-                  required
-                  value={invoiceDate}
-                  onChange={(e) => setInvoiceDate(e.target.value)}
-                  className="w-full bg-slate-100 p-2 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden font-bold text-slate-800"
-                />
               </div>
 
               <div>
@@ -1180,6 +1453,37 @@ export default function SalesInvoiceView({
                     {lang === 'en' ? 'Reserved list' : 'قائمة المحجوز'}
                   </button>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-slate-500 font-semibold mb-1">
+                  {lang === 'en' ? "Invoice Date *" : "تاريخ الفاتورة *"}
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={invoiceDate}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setDueDate(prev => (prev === invoiceDate || prev < next ? next : prev));
+                    setInvoiceDate(next);
+                  }}
+                  className="w-full bg-slate-100 p-2 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden font-bold text-slate-800"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-500 font-semibold mb-1">
+                  {lang === 'en' ? "Due Date *" : "تاريخ الاستحقاق *"}
+                </label>
+                <input
+                  type="date"
+                  required
+                  value={dueDate}
+                  min={invoiceDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full bg-slate-100 p-2 border-none rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:outline-hidden font-bold text-slate-800"
+                />
               </div>
 
               <div>
@@ -1397,7 +1701,8 @@ export default function SalesInvoiceView({
         )}
       </div>
 
-      {/* RIGHT COLUMN: Print designer + ZATCA status */}
+      {/* RIGHT COLUMN: Print designer + ZATCA status (create tab only) */}
+      {activeTab === 'create' && (
       <div className="xl:col-span-5 flex flex-col space-y-4">
         
         {/* Designer / Quick Layout Controls */}
@@ -1635,118 +1940,75 @@ export default function SalesInvoiceView({
           );
         })()}
       </div>
+      )}
 
-      {/* Live invoice preview — full width under both columns */}
-      <div className="xl:col-span-12">
-        {selectedInvoice ? (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col justify-between">
-                {/* Action Bar */}
-                <div className="bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between text-xs">
-                  <span className="font-medium text-slate-700">
-                    {lang === 'en' ? `Viewing: ${selectedInvoice.invoiceNumber}` : `عرض: ${selectedInvoice.invoiceNumber}`}
-                  </span>
-
-                  <div className="flex gap-2">
+      {/* Invoice preview: inline on Issue tab, popup from Registry View */}
+      {selectedInvoice && (showPreviewModal || activeTab === 'create') && (
+        <>
+          {showPreviewModal && (
+            <div
+              className="fixed inset-0 z-[60] bg-slate-900/70 backdrop-blur-sm"
+              onClick={() => setShowPreviewModal(false)}
+            />
+          )}
+          <div
+            className={
+              showPreviewModal
+                ? 'fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none'
+                : 'xl:col-span-12'
+            }
+          >
+            <div
+              className={
+                showPreviewModal
+                  ? 'pointer-events-auto bg-white rounded-2xl border border-slate-100 shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden flex flex-col'
+                  : 'bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col justify-between'
+              }
+            >
+              <div className={`bg-slate-50 px-4 py-3 border-b border-slate-100 flex items-center justify-between text-xs ${showPreviewModal ? 'shrink-0' : ''}`}>
+                <span className="font-medium text-slate-700">
+                  {lang === 'en' ? `Viewing: ${selectedInvoice.invoiceNumber}` : `عرض: ${selectedInvoice.invoiceNumber}`}
+                </span>
+                <div className="flex gap-2 items-center">
+                  <button
+                    type="button"
+                    onClick={handlePrintInvoice}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    {lang === 'en' ? 'Print' : 'طباعة'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={selectedInvoice.isReturned}
+                    onClick={() => {
+                      setReturnInvoiceId(selectedInvoice.id);
+                      setShowReturnModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    {lang === 'en' ? 'Credit Note' : 'إشعار دائن'}
+                  </button>
+                  {showPreviewModal && (
                     <button
-                      onClick={() => {
-                        const printContent = document.getElementById('printable-a4-area');
-                        if (printContent) {
-                          const windowUrl = 'about:blank';
-                          const uniqueName = new Date().getTime();
-                          const printWindow = window.open(windowUrl, uniqueName.toString(), 'left=50,top=50,width=850,height=950,toolbar=0,scrollbars=1,status=0');
-                          if (printWindow) {
-                            printWindow.document.write(`
-                              <html>
-                                <head>
-                                  <title>${selectedInvoice.invoiceNumber}</title>
-                                  <script src="https://cdn.tailwindcss.com"></script>
-                                  <script>
-                                    tailwind.config = {
-                                      theme: {
-                                        extend: {
-                                          colors: {
-                                            blue: {
-                                              850: '#1e3a8a',
-                                            }
-                                          },
-                                          fontFamily: {
-                                            sans: ['Inter', 'Tajawal', 'Cairo', 'sans-serif'],
-                                            mono: ['JetBrains Mono', 'Fira Code', 'monospace']
-                                          }
-                                        }
-                                      }
-                                    }
-                                  </script>
-                                  <style>
-                                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;600;700&display=swap');
-                                    * { box-sizing: border-box; }
-                                    body { 
-                                      font-family: 'Inter', 'Tajawal', 'Cairo', sans-serif; 
-                                      margin: 0;
-                                      padding: 0;
-                                      background: #ffffff;
-                                      color: #0f172a;
-                                      -webkit-print-color-adjust: exact !important;
-                                      print-color-adjust: exact !important;
-                                    }
-                                    .font-serif-elegant {
-                                      font-family: 'Playfair Display', Georgia, serif !important;
-                                    }
-                                    @media print {
-                                      @page { 
-                                        size: A4 portrait; 
-                                        margin: 12mm 15mm 12mm 15mm; 
-                                      }
-                                      body { 
-                                        background: #ffffff;
-                                      }
-                                      #printable-a4-area {
-                                        min-height: 0 !important;
-                                        height: auto !important;
-                                        padding: 0 !important;
-                                        border: none !important;
-                                        box-shadow: none !important;
-                                        max-width: 100% !important;
-                                        width: 100% !important;
-                                      }
-                                      table { page-break-inside: avoid; }
-                                      tr { page-break-inside: avoid; }
-                                    }
-                                  </style>
-                                </head>
-                                <body class="m-0 p-0 bg-white" onload="setTimeout(function(){ window.print(); window.close(); }, 600);">
-                                  <div class="p-6">${printContent.innerHTML}</div>
-                                </body>
-                              </html>
-                            `);
-                            printWindow.document.close();
-                          }
-                        }
-                      }}
-                      className="p-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 hover:text-slate-900 transition-colors flex items-center gap-1 text-[10px] font-bold"
+                      type="button"
+                      onClick={() => setShowPreviewModal(false)}
+                      className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-slate-100 cursor-pointer"
+                      title={lang === 'en' ? 'Close' : 'إغلاق'}
                     >
-                      <Printer className="w-3.5 h-3.5" />
-                      {t.print}
+                      <X className="w-4 h-4" />
                     </button>
-                
-                <button
-                  disabled={selectedInvoice.isReturned}
-                  onClick={() => {
-                    setReturnInvoiceId(selectedInvoice.id);
-                    setShowReturnModal(true);
-                  }}
-                  className="p-1.5 bg-rose-50 border border-rose-200 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex items-center gap-1 text-[10px] font-bold disabled:opacity-40"
-                >
-                  <Undo2 className="w-3.5 h-3.5" />
-                  {t.return}
-                </button>
+                  )}
+                </div>
               </div>
-            </div>
+
+              <div className={showPreviewModal ? 'overflow-y-auto p-4 bg-slate-100/80' : ''}>
 
             {/* A4 Container */}
             <div 
               id="printable-a4-area" 
-              className={`p-5 text-slate-800 text-[10px] relative flex flex-col justify-between min-h-[700px] shadow-xs duration-300 transition-all ${tpl.container}`}
+              className={`p-5 text-slate-800 text-[10px] relative flex flex-col justify-between min-h-[700px] shadow-xs duration-300 transition-all bg-white ${tpl.container}`}
               dir={designerLanguage === 'ar' ? 'rtl' : 'ltr'}
             >
               <div>
@@ -1879,7 +2141,7 @@ export default function SalesInvoiceView({
                       </div>
                       <div className="flex justify-between gap-1">
                         <span className="text-slate-400">{designerLanguage === 'ar' ? 'تاريخ الاستحقاق:' : 'Due Date:'}</span>
-                        <span className="font-mono text-slate-800">{selectedInvoice.date}</span>
+                        <span className="font-mono text-slate-800">{selectedInvoice.dueDate || selectedInvoice.date}</span>
                       </div>
                       <div className="flex justify-between gap-1">
                         <span className="text-slate-400">{designerLanguage === 'ar' ? 'طريقة الدفع:' : 'Payment:'}</span>
@@ -2080,18 +2342,26 @@ export default function SalesInvoiceView({
                 </div>
               </div>
             </div>
+              </div>
+            </div>
           </div>
-        ) : (
+        </>
+      )}
+
+      {activeTab === 'create' && !selectedInvoice && (
+        <div className="xl:col-span-12">
           <div className="bg-white rounded-2xl border border-slate-100 shadow-xs p-12 text-center text-slate-400 text-xs">
-            {lang === 'en' ? "Select an invoice to preview the certified ZATCA document." : "اختر فاتورة لعرض وثيقة زاتكا المعتمدة."}
+            {lang === 'en'
+              ? 'Issue an invoice to preview the certified ZATCA document here.'
+              : 'أصدر فاتورة لعرض وثيقة زاتكا المعتمدة هنا.'}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* MODAL / DRAWER FOR RETURNING INVOICES (CREDIT NOTES) */}
       <AnimatePresence>
         {showReturnModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-[70]">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}

@@ -26,7 +26,10 @@ function bearer(req: Request): string | null {
   return match?.[1] || null;
 }
 
-async function requireSuperAdmin(req: Request, res: Response): Promise<{ admin: SupabaseClient; userId: string } | null> {
+async function requireUserManager(
+  req: Request,
+  res: Response,
+): Promise<{ admin: SupabaseClient; userId: string; isSuperAdmin: boolean } | null> {
   const admin = serviceClient();
   if (!admin) {
     sendPublicError(res, 503, 'Service unavailable.');
@@ -47,11 +50,34 @@ async function requireSuperAdmin(req: Request, res: Response): Promise<{ admin: 
     .select('role_id, is_active')
     .eq('id', data.user.id)
     .maybeSingle();
-  if (profileError || !profile || profile.role_id !== 'super_admin' || profile.is_active === false) {
+  if (profileError || !profile || profile.is_active === false) {
     sendPublicError(res, 403, 'Forbidden.');
     return null;
   }
-  return { admin, userId: data.user.id };
+  if (profile.role_id === 'super_admin') {
+    return { admin, userId: data.user.id, isSuperAdmin: true };
+  }
+  const { data: role, error: roleError } = await admin
+    .from('roles')
+    .select('permissions')
+    .eq('id', profile.role_id)
+    .maybeSingle();
+  const permissions = Array.isArray(role?.permissions) ? role.permissions as string[] : [];
+  if (roleError || !permissions.includes('platform.users')) {
+    sendPublicError(res, 403, 'Forbidden.');
+    return null;
+  }
+  return { admin, userId: data.user.id, isSuperAdmin: false };
+}
+
+async function profileRoleId(admin: SupabaseClient, id: string): Promise<string | null> {
+  const { data, error } = await admin
+    .from('profiles')
+    .select('role_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (error || !data) return null;
+  return typeof data.role_id === 'string' ? data.role_id : null;
 }
 
 async function resolveLoginEmail(admin: SupabaseClient, lookup: string): Promise<string | null> {
@@ -190,19 +216,24 @@ export function registerAuthRoutes(app: Express): void {
   });
 
   app.post('/api/auth/users', signupLimiter, async (req, res) => {
-    const ctx = await requireSuperAdmin(req, res);
+    const ctx = await requireUserManager(req, res);
     if (!ctx) return;
     try {
       const body = req.body || {};
       const username = String(body.username || '').trim().toLowerCase();
       const email = String(body.email || '').trim() || `${username}@ksa-erp.sa`;
       const password = String(body.password || '');
+      const roleId = String(body.roleId || body.role_id || 'viewer');
       if (!username || !body.nameEn) {
         sendPublicError(res, 400, 'Username and English name are required.');
         return;
       }
       if (!password) {
         sendPublicError(res, 400, 'Password is required.');
+        return;
+      }
+      if (!ctx.isSuperAdmin && roleId === 'super_admin') {
+        sendPublicError(res, 403, 'Only Super Admin can create Super Admin accounts.');
         return;
       }
       const created = await ctx.admin.auth.admin.createUser({
@@ -215,7 +246,7 @@ export function registerAuthRoutes(app: Express): void {
         sendPublicError(res, 400, 'Could not create user.', created.error, 'auth.createUser');
         return;
       }
-      const row = profileRow(created.data.user.id, { ...body, username, email });
+      const row = profileRow(created.data.user.id, { ...body, username, email, roleId });
       const { data, error } = await ctx.admin.from('profiles').upsert({
         ...row,
         created_at: new Date().toISOString(),
@@ -232,11 +263,23 @@ export function registerAuthRoutes(app: Express): void {
   });
 
   app.patch('/api/auth/users/:id', async (req, res) => {
-    const ctx = await requireSuperAdmin(req, res);
+    const ctx = await requireUserManager(req, res);
     if (!ctx) return;
     try {
       const id = req.params.id;
       const body = req.body || {};
+      const targetRole = await profileRoleId(ctx.admin, id);
+      if (!ctx.isSuperAdmin && targetRole === 'super_admin') {
+        sendPublicError(res, 403, 'Super Admin accounts cannot be modified by other roles.');
+        return;
+      }
+      const nextRoleId = body.roleId !== undefined || body.role_id !== undefined
+        ? String(body.roleId || body.role_id || '')
+        : null;
+      if (!ctx.isSuperAdmin && nextRoleId === 'super_admin') {
+        sendPublicError(res, 403, 'Only Super Admin can assign the Super Admin role.');
+        return;
+      }
       const row = profileRow(id, body);
       if (body.password) {
         const updated = await ctx.admin.auth.admin.updateUserById(id, {
@@ -269,12 +312,17 @@ export function registerAuthRoutes(app: Express): void {
   });
 
   app.delete('/api/auth/users/:id', async (req, res) => {
-    const ctx = await requireSuperAdmin(req, res);
+    const ctx = await requireUserManager(req, res);
     if (!ctx) return;
     try {
       const id = req.params.id;
       if (id === ctx.userId) {
         sendPublicError(res, 400, 'You cannot delete your own account.');
+        return;
+      }
+      const targetRole = await profileRoleId(ctx.admin, id);
+      if (!ctx.isSuperAdmin && targetRole === 'super_admin') {
+        sendPublicError(res, 403, 'Super Admin accounts cannot be deleted by other roles.');
         return;
       }
       const deleted = await ctx.admin.auth.admin.deleteUser(id);

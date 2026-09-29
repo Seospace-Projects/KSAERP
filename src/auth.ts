@@ -300,9 +300,24 @@ export function firstAllowedMenu(
   roles: Role[],
   settings: AppSettings
 ): MenuId {
-  const order: MenuId[] = isSuperAdmin(user)
-    ? ['platform', 'platform-schema', 'dashboard', 'sales', 'expenses', 'inventory', 'contacts', 'accounting', 'vat', 'settings', 'data-reset']
-    : ['dashboard', 'sales', 'expenses', 'inventory', 'contacts', 'accounting', 'vat', 'settings', 'data-reset'];
+  const order: MenuId[] = [
+    'platform',
+    'platform-users',
+    'platform-roles',
+    'platform-settings',
+    'platform-features',
+    'platform-data-reset',
+    'platform-schema',
+    'dashboard',
+    'sales',
+    'expenses',
+    'inventory',
+    'contacts',
+    'accounting',
+    'vat',
+    'settings',
+    'data-reset',
+  ];
   return order.find(id => canAccessMenu(user, roles, settings, id)) || 'dashboard';
 }
 

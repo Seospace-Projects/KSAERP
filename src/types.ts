@@ -106,6 +106,7 @@ export interface Invoice {
   invoiceNumber: string;
   invoiceType: 'Standard' | 'Simplified' | 'POS';
   date: string;
+  dueDate?: string;
   customerId: string;
   customerNameEn: string;
   customerNameAr: string;
@@ -128,6 +129,9 @@ export interface Invoice {
   timestamp?: string;
   qrCodeTlv?: string;
   companyDetails?: CompanyProfile;
+  companyId?: string;
+  companyNameEn?: string;
+  companyNameAr?: string;
 }
 
 export interface ReservedInvoiceNumber {

@@ -14,7 +14,7 @@ import {
   EyeOff,
   RotateCcw,
 } from 'lucide-react';
-import { ALL_PERMISSIONS, validatePassword } from '../auth';
+import { ALL_PERMISSIONS, isSuperAdmin, validatePassword } from '../auth';
 import { createUserAccount, deleteUserAccount, updateUserAccount } from '../db/authApi';
 import { DATA_RESET_TARGETS } from '../dataReset';
 import {
@@ -312,7 +312,16 @@ function UsersPanel({
     setShowPassword(false);
   };
 
+  const viewerIsSuperAdmin = isSuperAdmin(currentUser);
+  const visibleUsers = users.filter(u => viewerIsSuperAdmin || u.roleId !== 'super_admin');
+  const assignableRoles = roles.filter(r => viewerIsSuperAdmin || r.id !== 'super_admin');
+  const superAdminCount = users.filter(u => u.roleId === 'super_admin' && u.isActive).length;
+
   const startEdit = (user: AuthUser) => {
+    if (!viewerIsSuperAdmin && user.roleId === 'super_admin') {
+      showNotice(lang === 'en' ? 'Blocked' : 'غير مسموح', lang === 'en' ? 'Super Admin accounts are not visible to other roles.' : 'حسابات المشرف العام غير ظاهرة للأدوار الأخرى.', 'error');
+      return;
+    }
     setEditingId(user.id);
     setForm({
       username: user.username,
@@ -325,8 +334,6 @@ function UsersPanel({
     });
     setShowForm(true);
   };
-
-  const superAdminCount = users.filter(u => u.roleId === 'super_admin' && u.isActive).length;
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -348,9 +355,18 @@ function UsersPanel({
       }
     }
 
+    if (!viewerIsSuperAdmin && form.roleId === 'super_admin') {
+      showNotice(lang === 'en' ? 'Blocked' : 'غير مسموح', lang === 'en' ? 'Only Super Admin can assign the Super Admin role.' : 'فقط المشرف العام يمكنه تعيين دور المشرف العام.', 'error');
+      return;
+    }
+
     if (editingId) {
       const existing = users.find(u => u.id === editingId);
       if (!existing) return;
+      if (!viewerIsSuperAdmin && existing.roleId === 'super_admin') {
+        showNotice(lang === 'en' ? 'Blocked' : 'غير مسموح', lang === 'en' ? 'Super Admin accounts cannot be edited by other roles.' : 'لا يمكن للأدوار الأخرى تعديل حسابات المشرف العام.', 'error');
+        return;
+      }
       if (existing.roleId === 'super_admin' && (form.roleId !== 'super_admin' || !form.isActive) && superAdminCount <= 1) {
         showNotice(lang === 'en' ? 'Blocked' : 'غير مسموح', lang === 'en' ? 'The last Super Admin cannot be demoted or disabled.' : 'لا يمكن تخفيض أو تعطيل آخر مشرف عام.', 'error');
         return;
@@ -395,6 +411,10 @@ function UsersPanel({
   const handleDelete = (user: AuthUser) => {
     if (user.id === currentUser.id) {
       showNotice(lang === 'en' ? 'Blocked' : 'غير مسموح', lang === 'en' ? 'You cannot delete your own account.' : 'لا يمكنك حذف حسابك.', 'error');
+      return;
+    }
+    if (!viewerIsSuperAdmin && user.roleId === 'super_admin') {
+      showNotice(lang === 'en' ? 'Blocked' : 'غير مسموح', lang === 'en' ? 'Super Admin accounts cannot be deleted by other roles.' : 'لا يمكن للأدوار الأخرى حذف حسابات المشرف العام.', 'error');
       return;
     }
     if (user.roleId === 'super_admin' && superAdminCount <= 1) {
@@ -449,7 +469,7 @@ function UsersPanel({
           </Field>
           <Field label={lang === 'en' ? 'Role' : 'الدور'}>
             <select value={form.roleId} onChange={e => setForm({ ...form, roleId: e.target.value })} className="w-full bg-slate-100 rounded-xl p-2">
-              {roles.map(r => (
+              {assignableRoles.map(r => (
                 <option key={r.id} value={r.id}>{lang === 'en' ? r.nameEn : r.nameAr}</option>
               ))}
             </select>
@@ -490,7 +510,7 @@ function UsersPanel({
             </tr>
           </thead>
           <tbody>
-            {users.map(user => {
+            {visibleUsers.map(user => {
               const role = roles.find(r => r.id === user.roleId);
               return (
                 <tr key={user.id} className="border-t border-slate-100">

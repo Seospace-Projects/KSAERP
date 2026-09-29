@@ -14,7 +14,7 @@ interface LoginViewProps {
 
 export default function LoginView({
   onLogin,
-  onForgotPassword,
+  // onForgotPassword — hidden for now; keep prop for easy restore
   lang,
   setLang,
   appNameEn = 'KSA ENTERPRISE',
@@ -40,29 +40,6 @@ export default function LoginView({
       setError(result.error);
       setIsLoading(false);
     }
-  };
-
-  const handleForgot = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    setError('');
-    setNotice('');
-    if (!username.trim()) {
-      setError(lang === 'en' ? 'Enter your username or email first.' : 'أدخل اسم المستخدم أو البريد أولاً.');
-      return;
-    }
-    if (!onForgotPassword) return;
-    setIsLoading(true);
-    const result = await onForgotPassword(username.trim());
-    setIsLoading(false);
-    if (result.ok === false) {
-      setError(result.error);
-      return;
-    }
-    setNotice(
-      lang === 'en'
-        ? 'If that account exists, a reset email will be sent.'
-        : 'إذا كان الحساب موجوداً فستُرسل رسالة إعادة التعيين.',
-    );
   };
 
   return (
@@ -219,19 +196,9 @@ export default function LoginView({
 
             {/* Password field */}
             <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <label className="text-xs text-slate-400 font-semibold">
-                  {lang === 'en' ? "Secure Password" : "كلمة المرور الآمنة"}
-                </label>
-                <button
-                  type="button"
-                  onClick={handleForgot}
-                  disabled={isLoading}
-                  className="text-[10px] text-emerald-400 hover:text-emerald-300 font-medium transition-colors cursor-pointer disabled:opacity-60"
-                >
-                  {lang === 'en' ? "Forgot password?" : "نسيت كلمة المرور؟"}
-                </button>
-              </div>
+              <label className="text-xs text-slate-400 font-semibold block">
+                {lang === 'en' ? "Secure Password" : "كلمة المرور الآمنة"}
+              </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-500">
                   <Key className="w-4 h-4" />

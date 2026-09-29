@@ -636,45 +636,51 @@ export default function App() {
 
           {/* Menu Items */}
           <nav className="p-4 space-y-1 flex-1">
-            {superAdmin && (
-              <>
-                <div className={`px-3 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest ${themes[themeColor].footerText}`}>
-                  {lang === 'en' ? 'Platform' : 'المنصة'}
-                </div>
-                {[
-                  { id: 'platform', label: t.superAdmin, icon: Shield },
-                  { id: 'platform-users', label: t.platformUsers, icon: Users },
-                  { id: 'platform-roles', label: t.platformRoles, icon: KeyRound },
-                  { id: 'platform-settings', label: t.appSettingsMenu, icon: SlidersHorizontal },
-                  { id: 'platform-schema', label: t.sqlSchema, icon: Database },
-                  { id: 'platform-features', label: t.appFeatures, icon: Sparkles },
-                  { id: 'platform-data-reset', label: t.platformDataReset, icon: RotateCcw },
-                ].map(item => {
-                  const Icon = item.icon;
-                  const isActive = activeMenu === item.id;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setActiveMenu(item.id);
-                        setSidebarOpen(false);
-                      }}
-                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
-                        isActive 
-                          ? themes[themeColor].itemActive 
-                          : themes[themeColor].itemInactive
-                      }`}
-                    >
-                      <Icon className={`w-4 h-4 ${isActive ? themes[themeColor].sidebarIconActive : themes[themeColor].sidebarIconInactive}`} />
-                      <span className="truncate">{item.label}</span>
-                    </button>
-                  );
-                })}
-                <div className={`px-3 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest ${themes[themeColor].footerText}`}>
-                  {lang === 'en' ? 'Company ERP' : 'نظام المنشأة'}
-                </div>
-              </>
-            )}
+            {(() => {
+              const platformItems = [
+                { id: 'platform' as const, label: t.superAdmin, icon: Shield },
+                { id: 'platform-users' as const, label: t.platformUsers, icon: Users },
+                { id: 'platform-roles' as const, label: t.platformRoles, icon: KeyRound },
+                { id: 'platform-settings' as const, label: t.appSettingsMenu, icon: SlidersHorizontal },
+                { id: 'platform-schema' as const, label: t.sqlSchema, icon: Database },
+                { id: 'platform-features' as const, label: t.appFeatures, icon: Sparkles },
+                { id: 'platform-data-reset' as const, label: t.platformDataReset, icon: RotateCcw },
+              ].filter(item => canAccessMenu(currentUser, roles, appSettings, item.id));
+
+              if (platformItems.length === 0) return null;
+
+              return (
+                <>
+                  <div className={`px-3 pt-1 pb-2 text-[9px] font-bold uppercase tracking-widest ${themes[themeColor].footerText}`}>
+                    {lang === 'en' ? 'Platform' : 'المنصة'}
+                  </div>
+                  {platformItems.map(item => {
+                    const Icon = item.icon;
+                    const isActive = activeMenu === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveMenu(item.id);
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                          isActive 
+                            ? themes[themeColor].itemActive 
+                            : themes[themeColor].itemInactive
+                        }`}
+                      >
+                        <Icon className={`w-4 h-4 ${isActive ? themes[themeColor].sidebarIconActive : themes[themeColor].sidebarIconInactive}`} />
+                        <span className="truncate">{item.label}</span>
+                      </button>
+                    );
+                  })}
+                  <div className={`px-3 pt-3 pb-2 text-[9px] font-bold uppercase tracking-widest ${themes[themeColor].footerText}`}>
+                    {lang === 'en' ? 'Company ERP' : 'نظام المنشأة'}
+                  </div>
+                </>
+              );
+            })()}
             {[
               { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
               { id: 'sales', label: t.sales, icon: FileText },
@@ -865,7 +871,7 @@ export default function App() {
 
         {/* MAIN CONTROLLER CONTAINER */}
         <main className="p-6 max-w-7xl mx-auto w-full flex-1 min-h-0 overflow-y-auto">
-          {(activeMenu === 'platform' || activeMenu === 'platform-users' || activeMenu === 'platform-roles' || activeMenu === 'platform-settings' || activeMenu === 'platform-features' || activeMenu === 'platform-data-reset') && superAdmin && (
+          {(activeMenu === 'platform' || activeMenu === 'platform-users' || activeMenu === 'platform-roles' || activeMenu === 'platform-settings' || activeMenu === 'platform-features' || activeMenu === 'platform-data-reset') && canAccessMenu(currentUser, roles, appSettings, activeMenu) && (
             <SuperAdminView
               lang={lang}
               section={
@@ -890,7 +896,7 @@ export default function App() {
             />
           )}
 
-          {activeMenu === 'platform-schema' && superAdmin && currentUser && (
+          {activeMenu === 'platform-schema' && canAccessMenu(currentUser, roles, appSettings, 'platform-schema') && currentUser && (
             <SqlSchemaView
               lang={lang}
               users={users}

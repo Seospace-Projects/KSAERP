@@ -209,6 +209,7 @@ CREATE TABLE IF NOT EXISTS public."invoices" (
   "invoice_number" text NOT NULL,
   "invoice_type" text NOT NULL,
   "date" text NOT NULL,
+  "due_date" text,
   "customer_id" text NOT NULL DEFAULT '',
   "customer_name_en" text NOT NULL DEFAULT '',
   "customer_name_ar" text NOT NULL DEFAULT '',
@@ -230,7 +231,10 @@ CREATE TABLE IF NOT EXISTS public."invoices" (
   "terms_ar" text,
   "timestamp" text,
   "qr_code_tlv" text,
-  "company_details" jsonb
+  "company_details" jsonb,
+  "company_id" text,
+  "company_name_en" text,
+  "company_name_ar" text
 );
 COMMENT ON TABLE public."invoices" IS 'Sales tax invoices and credit notes';
 
@@ -407,6 +411,7 @@ ALTER TABLE public."products" ADD COLUMN IF NOT EXISTS "warehouse_stock" jsonb N
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "invoice_number" text NOT NULL;
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "invoice_type" text NOT NULL;
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "date" text NOT NULL;
+ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "due_date" text;
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "customer_id" text NOT NULL DEFAULT '';
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "customer_name_en" text NOT NULL DEFAULT '';
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "customer_name_ar" text NOT NULL DEFAULT '';
@@ -429,6 +434,9 @@ ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "terms_ar" text;
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "timestamp" text;
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "qr_code_tlv" text;
 ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "company_details" jsonb;
+ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "company_id" text;
+ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "company_name_en" text;
+ALTER TABLE public."invoices" ADD COLUMN IF NOT EXISTS "company_name_ar" text;
 ALTER TABLE public."reserved_invoices" ADD COLUMN IF NOT EXISTS "company_id" text NOT NULL;
 ALTER TABLE public."reserved_invoices" ADD COLUMN IF NOT EXISTS "invoice_number" text NOT NULL;
 ALTER TABLE public."reserved_invoices" ADD COLUMN IF NOT EXISTS "created_at" text NOT NULL;
@@ -627,6 +635,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public."vouchers" TO authenticated;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."bank_reconciliations" TO authenticated;
 
 CREATE INDEX IF NOT EXISTS invoices_number_idx ON public.invoices (invoice_number);
+
+CREATE INDEX IF NOT EXISTS invoices_date_idx ON public.invoices (date);
+
+CREATE INDEX IF NOT EXISTS invoices_company_id_idx ON public.invoices (company_id);
 
 CREATE INDEX IF NOT EXISTS reserved_invoices_company_idx ON public.reserved_invoices (company_id);
 

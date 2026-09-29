@@ -205,6 +205,7 @@ export const SCHEMA_TABLES: SchemaTable[] = [
       { name: 'invoice_number', sqlType: 'text', notNull: true },
       { name: 'invoice_type', sqlType: 'text', notNull: true },
       { name: 'date', sqlType: 'text', notNull: true },
+      { name: 'due_date', sqlType: 'text' },
       { name: 'customer_id', sqlType: 'text', notNull: true, defaultSql: "''" },
       { name: 'customer_name_en', sqlType: 'text', notNull: true, defaultSql: "''" },
       { name: 'customer_name_ar', sqlType: 'text', notNull: true, defaultSql: "''" },
@@ -227,6 +228,9 @@ export const SCHEMA_TABLES: SchemaTable[] = [
       { name: 'timestamp', sqlType: 'text' },
       { name: 'qr_code_tlv', sqlType: 'text' },
       { name: 'company_details', sqlType: 'jsonb' },
+      { name: 'company_id', sqlType: 'text' },
+      { name: 'company_name_en', sqlType: 'text' },
+      { name: 'company_name_ar', sqlType: 'text' },
     ],
   },
   {
