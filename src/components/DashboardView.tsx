@@ -41,22 +41,92 @@ export default function DashboardView({
   const t = translations[lang];
   const isRtl = lang === 'ar';
 
+  const toDateKey = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const salesOnDate = (dateKey: string) =>
+    invoices
+      .filter(inv => inv.date === dateKey && !inv.isReturned)
+      .reduce((sum, inv) => sum + inv.total, 0);
+
+  const salesInMonth = (year: number, monthIndex: number) => {
+    const prefix = `${year}-${String(monthIndex + 1).padStart(2, '0')}-`;
+    return invoices
+      .filter(inv => !inv.isReturned && inv.date.startsWith(prefix))
+      .reduce((sum, inv) => sum + inv.total, 0);
+  };
+
+  /** Percent change vs prior period. Flat (0) when both sides are empty. */
+  const percentChange = (current: number, previous: number): number | null => {
+    if (previous === 0 && current === 0) return 0;
+    if (previous === 0) return null; // new activity vs empty prior — no meaningful %
+    return ((current - previous) / previous) * 100;
+  };
+
+  const formatTrend = (pct: number | null) => {
+    if (pct === null) {
+      return {
+        label: lang === 'en' ? 'New vs prior period' : 'جديد مقارنة بالفترة السابقة',
+        tone: 'neutral' as const,
+        Icon: ArrowRightLeft,
+      };
+    }
+    const rounded = Math.round(pct * 10) / 10;
+    const sign = rounded > 0 ? '+' : '';
+    if (rounded > 0) {
+      return {
+        label: `${sign}${rounded}%`,
+        tone: 'up' as const,
+        Icon: ArrowUpRight,
+      };
+    }
+    if (rounded < 0) {
+      return {
+        label: `${rounded}%`,
+        tone: 'down' as const,
+        Icon: ArrowDownRight,
+      };
+    }
+    return {
+      label: '0%',
+      tone: 'flat' as const,
+      Icon: ArrowRightLeft,
+    };
+  };
+
+  const now = new Date();
+  const todayStr = toDateKey(now);
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = toDateKey(yesterday);
+
+  const todaySales = salesOnDate(todayStr);
+  const yesterdaySales = salesOnDate(yesterdayStr);
+  const todayVsYesterday = percentChange(todaySales, yesterdaySales);
+  const todayTrend = formatTrend(todayVsYesterday);
+  const TodayTrendIcon = todayTrend.Icon;
+
+  const thisMonthSales = salesInMonth(now.getFullYear(), now.getMonth());
+  const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const lastMonthSales = salesInMonth(lastMonthDate.getFullYear(), lastMonthDate.getMonth());
+  const monthVsLast = percentChange(thisMonthSales, lastMonthSales);
+  const monthTrend = formatTrend(monthVsLast);
+  const MonthTrendIcon = monthTrend.Icon;
+
   // 1. Calculate stats dynamically from state
-  const totalSalesThisMonth = invoices
-    .filter(inv => !inv.isReturned)
-    .reduce((sum, inv) => sum + inv.total, 0);
+  const totalSalesThisMonth = thisMonthSales;
 
   const totalReturnedSales = invoices
     .filter(inv => inv.isReturned)
     .reduce((sum, inv) => sum + inv.total, 0);
 
-  const netSales = totalSalesThisMonth - totalReturnedSales;
-
-  // Let's compute today's sales (assuming invoices from today "2026-06-29" or the latest date)
-  const todayStr = "2026-06-29";
-  const todaySales = invoices
-    .filter(inv => inv.date === todayStr && !inv.isReturned)
-    .reduce((sum, inv) => sum + inv.total, 0);
+  const netSales = invoices
+    .filter(inv => !inv.isReturned)
+    .reduce((sum, inv) => sum + inv.total, 0) - totalReturnedSales;
 
   const totalReceivables = customers.reduce((sum, c) => sum + c.balance, 0);
   const totalPayables = suppliers.reduce((sum, s) => sum + s.balance, 0);
@@ -246,9 +316,20 @@ export default function DashboardView({
             <h3 className="text-2xl font-bold text-slate-900 tracking-tight">
               {todaySales.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm font-normal text-slate-500">{currency}</span>
             </h3>
-            <span className="flex items-center gap-1 text-emerald-600 text-xs font-semibold mt-1">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              +14.2% {lang === 'en' ? "vs yesterday" : "مقارنة بالأمس"}
+            <span
+              className={`flex items-center gap-1 text-xs font-semibold mt-1 ${
+                todayTrend.tone === 'up'
+                  ? 'text-emerald-600'
+                  : todayTrend.tone === 'down'
+                    ? 'text-rose-600'
+                    : 'text-slate-500'
+              }`}
+            >
+              <TodayTrendIcon className="w-3.5 h-3.5" />
+              {todayTrend.label}
+              {todayVsYesterday !== null || (todaySales === 0 && yesterdaySales === 0)
+                ? ` ${lang === 'en' ? 'vs yesterday' : 'مقارنة بالأمس'}`
+                : ''}
             </span>
           </div>
         </motion.div>
@@ -269,9 +350,20 @@ export default function DashboardView({
             <h3 className="text-2xl font-bold text-slate-900 tracking-tight">
               {totalSalesThisMonth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} <span className="text-sm font-normal text-slate-500">{currency}</span>
             </h3>
-            <span className="flex items-center gap-1 text-emerald-600 text-xs font-semibold mt-1">
-              <ArrowUpRight className="w-3.5 h-3.5" />
-              +22.8% {lang === 'en' ? "vs last month" : "مقارنة بالشهر الماضي"}
+            <span
+              className={`flex items-center gap-1 text-xs font-semibold mt-1 ${
+                monthTrend.tone === 'up'
+                  ? 'text-emerald-600'
+                  : monthTrend.tone === 'down'
+                    ? 'text-rose-600'
+                    : 'text-slate-500'
+              }`}
+            >
+              <MonthTrendIcon className="w-3.5 h-3.5" />
+              {monthTrend.label}
+              {monthVsLast !== null || (thisMonthSales === 0 && lastMonthSales === 0)
+                ? ` ${lang === 'en' ? 'vs last month' : 'مقارنة بالشهر الماضي'}`
+                : ''}
             </span>
           </div>
         </motion.div>

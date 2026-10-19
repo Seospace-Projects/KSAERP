@@ -14,7 +14,8 @@ import {
   ArrowRightLeft,
   ShieldCheck,
   Percent,
-  Trash2
+  Trash2,
+  Pencil
 } from 'lucide-react';
 import { translations } from '../utils';
 import { Customer, Supplier } from '../types';
@@ -85,7 +86,8 @@ export default function DirectoryView({
   };
 
   const [activeTab, setActiveTab] = useState<'customers' | 'suppliers'>('customers');
-  const [showAddForm, setShowAddForm] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [alertModal, setAlertModal] = useState<{
@@ -111,8 +113,61 @@ export default function DirectoryView({
   const [paymentTerms, setPaymentTerms] = useState('Net 30');
   const [openingBalance, setOpeningBalance] = useState(0);
 
-  // Submit contact
-  const handleAddContact = (e: React.FormEvent) => {
+  const resetForm = () => {
+    setCode('');
+    setNameEn('');
+    setNameAr('');
+    setVatNumber('');
+    setCrNumber('');
+    setPhone('');
+    setEmail('');
+    setAddress('');
+    setCreditLimit(50000);
+    setPaymentTerms('Net 30');
+    setOpeningBalance(0);
+    setEditingId(null);
+    setShowForm(false);
+  };
+
+  const openAddForm = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEditCustomer = (c: Customer) => {
+    setEditingId(c.id);
+    setCode(c.code);
+    setNameEn(c.nameEn);
+    setNameAr(c.nameAr);
+    setVatNumber(c.vatNumber || '');
+    setCrNumber(c.crNumber || '');
+    setPhone(c.phone);
+    setEmail(c.email);
+    setAddress(c.address);
+    setCreditLimit(c.creditLimit);
+    setPaymentTerms(c.paymentTerms || 'Net 30');
+    setOpeningBalance(c.openingBalance);
+    setShowForm(true);
+  };
+
+  const openEditSupplier = (s: Supplier) => {
+    setEditingId(s.id);
+    setCode(s.code);
+    setNameEn(s.nameEn);
+    setNameAr(s.nameAr);
+    setVatNumber(s.vatNumber || '');
+    setCrNumber('');
+    setPhone(s.phone);
+    setEmail(s.email);
+    setAddress(s.address);
+    setCreditLimit(50000);
+    setPaymentTerms('Net 30');
+    setOpeningBalance(s.openingBalance);
+    setShowForm(true);
+  };
+
+  // Submit contact (add or update)
+  const handleSaveContact = (e: React.FormEvent) => {
     e.preventDefault();
 
     const finalNameEn = nameEn.trim() || nameAr.trim();
@@ -158,57 +213,88 @@ export default function DirectoryView({
 
     const cleanOpeningBalance = isNaN(openingBalance) ? 0 : openingBalance;
     const cleanCreditLimit = isNaN(creditLimit) ? 50000 : creditLimit;
+    const isEditing = !!editingId;
 
     if (activeTab === 'customers') {
-      const newCustomer: Customer = {
-        id: `cust-${Date.now()}`,
-        code: code.trim() || `CUST-00${customers.length + 1}`,
-        nameEn: finalNameEn,
-        nameAr: finalNameAr,
-        vatNumber: vatNumber.trim() || undefined,
-        crNumber: crNumber.trim() || undefined,
-        phone: phone.trim() || '',
-        email: email.trim() || '',
-        address: address.trim() || '',
-        creditLimit: cleanCreditLimit,
-        paymentTerms: paymentTerms || 'Net 30',
-        openingBalance: cleanOpeningBalance,
-        balance: cleanOpeningBalance
-      };
-      setCustomers([...customers, newCustomer]);
-      setSuccessMessage(lang === 'en' ? `Customer "${finalNameEn}" has been successfully added!` : `تمت إضافة العميل "${finalNameAr}" بنجاح!`);
+      if (isEditing) {
+        setCustomers(prev => prev.map(c => {
+          if (c.id !== editingId) return c;
+          const openingDelta = cleanOpeningBalance - c.openingBalance;
+          return {
+            ...c,
+            code: code.trim() || c.code,
+            nameEn: finalNameEn,
+            nameAr: finalNameAr,
+            vatNumber: vatNumber.trim() || undefined,
+            crNumber: crNumber.trim() || undefined,
+            phone: phone.trim() || '',
+            email: email.trim() || '',
+            address: address.trim() || '',
+            creditLimit: cleanCreditLimit,
+            paymentTerms: paymentTerms || 'Net 30',
+            openingBalance: cleanOpeningBalance,
+            balance: c.balance + openingDelta,
+          };
+        }));
+        setSuccessMessage(lang === 'en' ? `Customer "${finalNameEn}" has been updated.` : `تم تحديث العميل "${finalNameAr}".`);
+      } else {
+        const newCustomer: Customer = {
+          id: `cust-${Date.now()}`,
+          code: code.trim() || `CUST-00${customers.length + 1}`,
+          nameEn: finalNameEn,
+          nameAr: finalNameAr,
+          vatNumber: vatNumber.trim() || undefined,
+          crNumber: crNumber.trim() || undefined,
+          phone: phone.trim() || '',
+          email: email.trim() || '',
+          address: address.trim() || '',
+          creditLimit: cleanCreditLimit,
+          paymentTerms: paymentTerms || 'Net 30',
+          openingBalance: cleanOpeningBalance,
+          balance: cleanOpeningBalance
+        };
+        setCustomers([...customers, newCustomer]);
+        setSuccessMessage(lang === 'en' ? `Customer "${finalNameEn}" has been successfully added!` : `تمت إضافة العميل "${finalNameAr}" بنجاح!`);
+      }
     } else {
-      const newSupplier: Supplier = {
-        id: `supp-${Date.now()}`,
-        code: code.trim() || `SUPP-00${suppliers.length + 1}`,
-        nameEn: finalNameEn,
-        nameAr: finalNameAr,
-        vatNumber: vatNumber.trim() || undefined,
-        phone: phone.trim() || '',
-        email: email.trim() || '',
-        address: address.trim() || '',
-        openingBalance: cleanOpeningBalance,
-        balance: cleanOpeningBalance
-      };
-      setSuppliers([...suppliers, newSupplier]);
-      setSuccessMessage(lang === 'en' ? `Supplier "${finalNameEn}" has been successfully added!` : `تمت إضافة المورد "${finalNameAr}" بنجاح!`);
+      if (isEditing) {
+        setSuppliers(prev => prev.map(s => {
+          if (s.id !== editingId) return s;
+          const openingDelta = cleanOpeningBalance - s.openingBalance;
+          return {
+            ...s,
+            code: code.trim() || s.code,
+            nameEn: finalNameEn,
+            nameAr: finalNameAr,
+            vatNumber: vatNumber.trim() || undefined,
+            phone: phone.trim() || '',
+            email: email.trim() || '',
+            address: address.trim() || '',
+            openingBalance: cleanOpeningBalance,
+            balance: s.balance + openingDelta,
+          };
+        }));
+        setSuccessMessage(lang === 'en' ? `Supplier "${finalNameEn}" has been updated.` : `تم تحديث المورد "${finalNameAr}".`);
+      } else {
+        const newSupplier: Supplier = {
+          id: `supp-${Date.now()}`,
+          code: code.trim() || `SUPP-00${suppliers.length + 1}`,
+          nameEn: finalNameEn,
+          nameAr: finalNameAr,
+          vatNumber: vatNumber.trim() || undefined,
+          phone: phone.trim() || '',
+          email: email.trim() || '',
+          address: address.trim() || '',
+          openingBalance: cleanOpeningBalance,
+          balance: cleanOpeningBalance
+        };
+        setSuppliers([...suppliers, newSupplier]);
+        setSuccessMessage(lang === 'en' ? `Supplier "${finalNameEn}" has been successfully added!` : `تمت إضافة المورد "${finalNameAr}" بنجاح!`);
+      }
     }
 
-    // Reset Form
-    setCode('');
-    setNameEn('');
-    setNameAr('');
-    setVatNumber('');
-    setCrNumber('');
-    setPhone('');
-    setEmail('');
-    setAddress('');
-    setCreditLimit(50000);
-    setPaymentTerms('Net 30');
-    setOpeningBalance(0);
-    setShowAddForm(false);
+    resetForm();
 
-    // Auto dismiss message
     setTimeout(() => {
       setSuccessMessage(null);
     }, 4000);
@@ -251,7 +337,7 @@ export default function DirectoryView({
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between flex-wrap gap-3">
         <div className="flex gap-2">
           <button
-            onClick={() => { setActiveTab('customers'); setShowAddForm(false); }}
+            onClick={() => { setActiveTab('customers'); resetForm(); }}
             className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
               activeTab === 'customers' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
             }`}
@@ -259,7 +345,7 @@ export default function DirectoryView({
             {lang === 'en' ? "Customer Directory (Debtors)" : "دليل العملاء المدينين"}
           </button>
           <button
-            onClick={() => { setActiveTab('suppliers'); setShowAddForm(false); }}
+            onClick={() => { setActiveTab('suppliers'); resetForm(); }}
             className={`px-4 py-2 text-xs font-semibold rounded-xl transition-all cursor-pointer ${
               activeTab === 'suppliers' ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-50'
             }`}
@@ -268,9 +354,9 @@ export default function DirectoryView({
           </button>
         </div>
 
-        {!showAddForm && (
+        {!showForm && (
           <button
-            onClick={() => setShowAddForm(true)}
+            onClick={openAddForm}
             className="px-4 py-2 bg-blue-600 text-white font-bold rounded-xl text-xs flex items-center gap-1 hover:bg-blue-700 shadow-lg shadow-blue-600/20 transition-all cursor-pointer"
           >
             <Plus className="w-3.5 h-3.5" />
@@ -281,16 +367,20 @@ export default function DirectoryView({
         )}
       </div>
 
-      {/* Directory Main List or Add Form */}
+      {/* Directory Main List or Add/Edit Form */}
       <div className="grid grid-cols-1 gap-6">
-        {showAddForm ? (
-          <form onSubmit={handleAddContact} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
+        {showForm ? (
+          <form onSubmit={handleSaveContact} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-5">
             <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
-              <UserPlus className="w-5 h-5 text-blue-600" />
+              {editingId ? <Pencil className="w-5 h-5 text-blue-600" /> : <UserPlus className="w-5 h-5 text-blue-600" />}
               <h3 className="font-extrabold text-slate-800 text-sm">
-                {activeTab === 'customers' 
-                  ? (lang === 'en' ? "Register New Business Customer" : "تسجيل عميل تجاري جديد")
-                  : (lang === 'en' ? "Register New Wholesale Supplier" : "تسجيل مورد جملة جديد")}
+                {editingId
+                  ? (activeTab === 'customers'
+                    ? (lang === 'en' ? 'Edit Customer Details' : 'تعديل بيانات العميل')
+                    : (lang === 'en' ? 'Edit Supplier Details' : 'تعديل بيانات المورد'))
+                  : (activeTab === 'customers'
+                    ? (lang === 'en' ? 'Register New Business Customer' : 'تسجيل عميل تجاري جديد')
+                    : (lang === 'en' ? 'Register New Wholesale Supplier' : 'تسجيل مورد جملة جديد'))}
               </h3>
             </div>
 
@@ -461,7 +551,7 @@ export default function DirectoryView({
             <div className="flex justify-end gap-3 text-xs pt-2">
               <button
                 type="button"
-                onClick={() => setShowAddForm(false)}
+                onClick={resetForm}
                 className="px-4 py-2 bg-slate-100 text-slate-600 font-bold rounded-xl cursor-pointer hover:bg-slate-200"
               >
                 {t.cancel}
@@ -470,9 +560,11 @@ export default function DirectoryView({
                 type="submit"
                 className="px-5 py-2 bg-blue-600 text-white font-bold rounded-xl shadow-lg shadow-blue-600/20 hover:bg-blue-700 cursor-pointer"
               >
-                {activeTab === 'customers' 
-                  ? (lang === 'en' ? "Add Customer" : "إضافة عميل جديد") 
-                  : (lang === 'en' ? "Add Supplier" : "إضافة مورد جديد")}
+                {editingId
+                  ? (lang === 'en' ? 'Save Changes' : 'حفظ التعديلات')
+                  : (activeTab === 'customers'
+                    ? (lang === 'en' ? 'Add Customer' : 'إضافة عميل جديد')
+                    : (lang === 'en' ? 'Add Supplier' : 'إضافة مورد جديد'))}
               </button>
             </div>
           </form>
@@ -576,13 +668,24 @@ export default function DirectoryView({
                             {c.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}
                           </span>
                         </div>
-                        <button
-                          onClick={() => handleDeleteCustomer(c.id)}
-                          className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                          title={lang === 'en' ? "Delete Customer" : "حذف العميل"}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditCustomer(c)}
+                            className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
+                            title={lang === 'en' ? "Edit Customer" : "تعديل العميل"}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomer(c.id)}
+                            className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                            title={lang === 'en' ? "Delete Customer" : "حذف العميل"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))
@@ -642,13 +745,24 @@ export default function DirectoryView({
                             {s.balance.toLocaleString(undefined, { minimumFractionDigits: 2 })} {currency}
                           </span>
                         </div>
-                        <button
-                          onClick={() => handleDeleteSupplier(s.id)}
-                          className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
-                          title={lang === 'en' ? "Delete Supplier" : "حذف المورد"}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditSupplier(s)}
+                            className="p-1.5 hover:bg-blue-50 text-slate-400 hover:text-blue-600 rounded-lg transition-colors cursor-pointer"
+                            title={lang === 'en' ? "Edit Supplier" : "تعديل المورد"}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSupplier(s.id)}
+                            className="p-1.5 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-lg transition-colors cursor-pointer"
+                            title={lang === 'en' ? "Delete Supplier" : "حذف المورد"}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))
