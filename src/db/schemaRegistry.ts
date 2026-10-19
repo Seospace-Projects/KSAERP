@@ -46,6 +46,7 @@ export const SCHEMA_TABLES: SchemaTable[] = [
       { name: 'is_active', sqlType: 'boolean', notNull: true, defaultSql: 'true' },
       { name: 'created_at', sqlType: 'timestamptz', notNull: true, defaultSql: 'now()' },
       { name: 'last_login_at', sqlType: 'timestamptz' },
+      { name: 'active_session_id', sqlType: 'text' },
     ],
   },
   {

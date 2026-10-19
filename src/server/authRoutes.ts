@@ -156,9 +156,55 @@ export function registerAuthRoutes(app: Express): void {
         .eq('id', data.user.id)
         .maybeSingle();
       if (!profile || profile.is_active === false) {
+        // Drop the just-created session for disabled accounts
+        try {
+          await admin.auth.admin.signOut(data.session.access_token, 'global');
+        } catch {
+          // ignore revoke failures
+        }
         sendPublicError(res, 403, 'This account is disabled.');
         return;
       }
+
+      // Bind this login as the only active device session
+      const activeSessionId = crypto.randomUUID();
+      const metaUpdate = await admin.auth.admin.updateUserById(data.user.id, {
+        app_metadata: {
+          ...(data.user.app_metadata || {}),
+          active_session_id: activeSessionId,
+        },
+      });
+      if (metaUpdate.error) {
+        sendPublicError(res, 500, 'Sign-in failed.', metaUpdate.error, 'auth.login.session');
+        return;
+      }
+      // Best-effort profile fields (column may be missing until SQL Schema is re-applied)
+      const profilePatch = await admin.from('profiles').update({
+        active_session_id: activeSessionId,
+        last_login_at: new Date().toISOString(),
+      }).eq('id', data.user.id);
+      if (profilePatch.error) {
+        await admin.from('profiles').update({
+          last_login_at: new Date().toISOString(),
+        }).eq('id', data.user.id);
+      }
+
+      // After auth + authorize: revoke every other refresh token / device
+      try {
+        const sessionClient = anonClient();
+        if (sessionClient) {
+          const { error: setErr } = await sessionClient.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          });
+          if (!setErr) {
+            await sessionClient.auth.signOut({ scope: 'others' });
+          }
+        }
+      } catch {
+        // Older GoTrue builds may lack scope=others; session id still enforces single device
+      }
+
       res.json({
         session: {
           access_token: data.session.access_token,
@@ -167,6 +213,7 @@ export function registerAuthRoutes(app: Express): void {
           expires_at: data.session.expires_at,
           token_type: data.session.token_type,
         },
+        activeSessionId,
       });
     } catch (err) {
       sendPublicError(res, 500, 'Sign-in failed.', err, 'auth.login');

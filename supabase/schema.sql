@@ -76,7 +76,8 @@ CREATE TABLE IF NOT EXISTS public."profiles" (
   "role_id" text NOT NULL REFERENCES public.roles(id),
   "is_active" boolean NOT NULL DEFAULT true,
   "created_at" timestamptz NOT NULL DEFAULT now(),
-  "last_login_at" timestamptz
+  "last_login_at" timestamptz,
+  "active_session_id" text
 );
 COMMENT ON TABLE public."profiles" IS 'App user profiles mapped 1:1 to auth.users';
 
@@ -324,6 +325,7 @@ ALTER TABLE public."profiles" ADD COLUMN IF NOT EXISTS "role_id" text NOT NULL;
 ALTER TABLE public."profiles" ADD COLUMN IF NOT EXISTS "is_active" boolean NOT NULL DEFAULT true;
 ALTER TABLE public."profiles" ADD COLUMN IF NOT EXISTS "created_at" timestamptz NOT NULL DEFAULT now();
 ALTER TABLE public."profiles" ADD COLUMN IF NOT EXISTS "last_login_at" timestamptz;
+ALTER TABLE public."profiles" ADD COLUMN IF NOT EXISTS "active_session_id" text;
 ALTER TABLE public."user_preferences" ADD COLUMN IF NOT EXISTS "theme" text NOT NULL DEFAULT 'green';
 ALTER TABLE public."user_preferences" ADD COLUMN IF NOT EXISTS "language" text NOT NULL DEFAULT 'en';
 ALTER TABLE public."user_preferences" ADD COLUMN IF NOT EXISTS "active_company_id" text;

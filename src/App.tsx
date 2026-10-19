@@ -75,6 +75,12 @@ import { applyDataReset, buildDataResetNextState, dataResetSyncJobs } from './da
 import { getSupabase, isSupabaseConfigured } from './db/client';
 import { setPersistAcrossSessions } from './db/cookieStorage';
 import {
+  clearActiveSessionId,
+  readActiveSessionId,
+  remoteSessionIdFromUser,
+  storeActiveSessionId,
+} from './db/sessionGuard';
+import {
   loadAll,
   loadProfile,
   lookupLoginEmail,
@@ -256,8 +262,21 @@ export default function App() {
         const { data } = await getSupabase().auth.getSession();
         if (cancelled) return;
         if (data.session?.user) {
-          await applySnapshot(data.session.user.id);
-          if (!cancelled) setIsLoggedIn(true);
+          const { data: userData } = await getSupabase().auth.getUser();
+          const remoteId = remoteSessionIdFromUser(userData.user);
+          const localId = readActiveSessionId();
+          // Single-device: only the fingerprint from the latest successful login may stay
+          if (remoteId && (!localId || remoteId !== localId)) {
+            clearActiveSessionId();
+            await getSupabase().auth.signOut({ scope: 'local' });
+            if (!cancelled) {
+              setIsLoggedIn(false);
+              setCurrentUser(null);
+            }
+          } else {
+            await applySnapshot(data.session.user.id);
+            if (!cancelled) setIsLoggedIn(true);
+          }
         }
       } catch {
         if (!cancelled) {
@@ -270,6 +289,84 @@ export default function App() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  // Force-logout when this account signs in on another device
+  useEffect(() => {
+    if (!isLoggedIn || !isSupabaseConfigured()) return;
+
+    const forceLocalLogout = async () => {
+      persistEnabledRef.current = false;
+      setHydrated(false);
+      clearActiveSessionId();
+      setIsLoggedIn(false);
+      setCurrentUser(null);
+      try {
+        await getSupabase().auth.signOut({ scope: 'local' });
+      } catch {
+        // ignore
+      }
+    };
+
+    const checkSingleSession = async () => {
+      try {
+        const localId = readActiveSessionId();
+        if (!localId) return;
+        const { data, error } = await getSupabase().auth.getUser();
+        if (error || !data.user) {
+          await forceLocalLogout();
+          return;
+        }
+        const remoteId = remoteSessionIdFromUser(data.user);
+        if (remoteId && remoteId !== localId) {
+          await forceLocalLogout();
+          return;
+        }
+        // Profile column check when available (schema upgrade)
+        const { data: profile } = await getSupabase()
+          .from('profiles')
+          .select('active_session_id, is_active')
+          .eq('id', data.user.id)
+          .maybeSingle();
+        if (profile && profile.is_active === false) {
+          await forceLocalLogout();
+          return;
+        }
+        if (
+          profile
+          && typeof profile.active_session_id === 'string'
+          && profile.active_session_id
+          && profile.active_session_id !== localId
+        ) {
+          await forceLocalLogout();
+        }
+      } catch {
+        // Network blips should not kick the user out
+      }
+    };
+
+    const { data: sub } = getSupabase().auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        persistEnabledRef.current = false;
+        setHydrated(false);
+        clearActiveSessionId();
+        setIsLoggedIn(false);
+        setCurrentUser(null);
+      }
+    });
+
+    void checkSingleSession();
+    const timer = window.setInterval(() => { void checkSingleSession(); }, 12_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void checkSingleSession();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    return () => {
+      sub.subscription.unsubscribe();
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [isLoggedIn]);
 
   const persistOn = hydrated && persistEnabledRef.current && isLoggedIn;
   const persistPlatform = persistOn && currentUser?.roleId === 'super_admin';
@@ -379,6 +476,15 @@ export default function App() {
           if (error) {
             return { ok: false as const, error: lang === 'en' ? 'Sign-in failed.' : 'فشل تسجيل الدخول.' };
           }
+          if (typeof body.activeSessionId === 'string' && body.activeSessionId) {
+            storeActiveSessionId(body.activeSessionId);
+          }
+          // Ensure prior devices are revoked from this browser session too
+          try {
+            await getSupabase().auth.signOut({ scope: 'others' });
+          } catch {
+            // ignore if Auth host does not support scope=others
+          }
         } else if (res.status === 401) {
           return {
             ok: false as const,
@@ -397,18 +503,28 @@ export default function App() {
             error: lang === 'en' ? 'Invalid username or password.' : 'اسم المستخدم أو كلمة المرور غير صحيحة.',
           };
         }
+        try {
+          await supabase.auth.signOut({ scope: 'others' });
+        } catch {
+          // ignore
+        }
+        const fallbackSessionId = crypto.randomUUID();
+        storeActiveSessionId(fallbackSessionId);
       }
 
       const { data } = await getSupabase().auth.getUser();
       if (!data.user) {
         return { ok: false as const, error: lang === 'en' ? 'Sign-in failed.' : 'فشل تسجيل الدخول.' };
       }
+      const remoteId = remoteSessionIdFromUser(data.user);
+      if (remoteId) storeActiveSessionId(remoteId);
       await applySnapshot(data.user.id);
       await touchLastLogin();
       setIsLoggedIn(true);
       return { ok: true as const };
     } catch (err) {
       if (err instanceof Error && err.message === 'inactive') {
+        clearActiveSessionId();
         await getSupabase().auth.signOut();
         return { ok: false as const, error: lang === 'en' ? 'This account is disabled.' : 'هذا الحساب معطّل.' };
       }
@@ -452,8 +568,9 @@ export default function App() {
     setHydrated(false);
     setIsLoggedIn(false);
     setCurrentUser(null);
+    clearActiveSessionId();
     if (isSupabaseConfigured()) {
-      await getSupabase().auth.signOut();
+      await getSupabase().auth.signOut({ scope: 'local' });
     }
   };
 

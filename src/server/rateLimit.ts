@@ -8,10 +8,10 @@ function tooMany(message: string) {
   };
 }
 
-/** Login / username lookup: 5 attempts per minute per IP. */
+/** Login / username lookup: 20 attempts per minute per IP (device switches included). */
 export const loginLimiter = rateLimit({
   windowMs: 60 * 1000,
-  limit: 5,
+  limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
   handler: tooMany('Too many sign-in attempts. Try again in a minute.'),
