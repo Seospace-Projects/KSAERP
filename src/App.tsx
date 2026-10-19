@@ -71,7 +71,7 @@ import {
   initialRoles,
   isSuperAdmin,
 } from './auth';
-import { applyDataReset } from './dataReset';
+import { applyDataReset, buildDataResetNextState, dataResetSyncJobs } from './dataReset';
 import { getSupabase, isSupabaseConfigured } from './db/client';
 import { setPersistAcrossSessions } from './db/cookieStorage';
 import {
@@ -522,7 +522,23 @@ export default function App() {
   const [pendingUseReserved, setPendingUseReserved] = useState<{ companyId: string; invoiceNumber: string } | null>(null);
   const reservedListCompany = companies.find(c => c.id === reservedListCompanyId) || company;
 
-  const executeDataReset = (selectedIds: DataResetTargetId[]) => {
+  const executeDataReset = async (selectedIds: DataResetTargetId[]) => {
+    const next = buildDataResetNextState(selectedIds, {
+      companies,
+      company,
+      customers,
+      suppliers,
+      products,
+      warehouses,
+      invoices,
+      reservedInvoices,
+      expenses,
+      accounts,
+      journalEntries,
+      vouchers,
+      bankReconciliations,
+    });
+
     applyDataReset(selectedIds, {
       setCompanies,
       setCompany,
@@ -538,6 +554,24 @@ export default function App() {
       setBankReconciliations,
       setReservedInvoices,
     });
+
+    // Immediate DB wipe/sync so reset survives refresh (do not rely on debounce only)
+    if (persistOn) {
+      const jobs = dataResetSyncJobs(selectedIds, next);
+      const results = await Promise.allSettled(
+        jobs.map(job => syncCollection(job.table, job.rows)),
+      );
+      const failed = results.find(r => r.status === 'rejected');
+      if (failed && failed.status === 'rejected') {
+        const reason = failed.reason;
+        const message = reason instanceof Error
+          ? reason.message
+          : (reason && typeof reason === 'object' && 'message' in reason
+            ? String((reason as { message: unknown }).message)
+            : 'Database sync failed');
+        throw new Error(message);
+      }
+    }
   };
 
   const executeDeleteCompany = () => {

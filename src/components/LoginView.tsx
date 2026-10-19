@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Key, User, Globe, Sparkles, Building2, CheckCircle2 } from 'lucide-react';
+import { Shield, Key, User, Globe, Sparkles, Building2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 interface LoginViewProps {
   onLogin: (username: string, password: string, rememberMe: boolean) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -24,6 +24,7 @@ export default function LoginView({
 }: LoginViewProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -204,13 +205,23 @@ export default function LoginView({
                   <Key className="w-4 h-4" />
                 </div>
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••"
                   required
-                  className="w-full bg-slate-900 border border-slate-800/80 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#006C35]/50 focus:border-[#006C35] transition-all font-mono"
+                  className="w-full bg-slate-900 border border-slate-800/80 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#006C35]/50 focus:border-[#006C35] transition-all font-mono"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(v => !v)}
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300 cursor-pointer"
+                  aria-label={showPassword
+                    ? (lang === 'en' ? 'Hide password' : 'إخفاء كلمة المرور')
+                    : (lang === 'en' ? 'Show password' : 'إظهار كلمة المرور')}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
             </div>
 

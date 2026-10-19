@@ -17,7 +17,7 @@ interface DataResetViewProps {
   lang: 'en' | 'ar';
   appSettings: AppSettings;
   records: DataResetRecords;
-  onReset: (selectedIds: DataResetTargetId[]) => void;
+  onReset: (selectedIds: DataResetTargetId[]) => void | Promise<void>;
 }
 
 export default function DataResetView({
@@ -42,8 +42,14 @@ export default function DataResetView({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [agreed, setAgreed] = useState(false);
   const [confirmText, setConfirmText] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
   const [previewTarget, setPreviewTarget] = useState<DataResetTargetMeta | null>(null);
-  const [notice, setNotice] = useState<{ open: boolean; title: string; message: string }>({
+  const [notice, setNotice] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    type?: 'success' | 'error';
+  }>({
     open: false,
     title: '',
     message: '',
@@ -86,17 +92,34 @@ export default function DataResetView({
     setConfirmText('');
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (isResetting) return;
     const ids = selectedList.map(t => t.id);
-    onReset(ids);
-    closeConfirm();
-    setNotice({
-      open: true,
-      title: lang === 'en' ? 'Data reset complete' : 'تم إعادة تعيين البيانات',
-      message: lang === 'en'
-        ? `Cleared: ${selectedNames}.`
-        : `تم مسح: ${selectedNames}.`,
-    });
+    setIsResetting(true);
+    try {
+      await onReset(ids);
+      closeConfirm();
+      setNotice({
+        open: true,
+        title: lang === 'en' ? 'Data reset complete' : 'تم إعادة تعيين البيانات',
+        message: lang === 'en'
+          ? `Cleared: ${selectedNames}.`
+          : `تم مسح: ${selectedNames}.`,
+        type: 'success',
+      });
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : (lang === 'en' ? 'Could not sync reset to the database.' : 'تعذر مزامنة إعادة التعيين مع قاعدة البيانات.');
+      setNotice({
+        open: true,
+        title: lang === 'en' ? 'Reset failed' : 'فشل إعادة التعيين',
+        message,
+        type: 'error',
+      });
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   return (
@@ -203,6 +226,7 @@ export default function DataResetView({
         records={records}
         agreed={agreed}
         confirmText={confirmText}
+        isResetting={isResetting}
         onAgreedChange={setAgreed}
         onConfirmTextChange={setConfirmText}
         onConfirm={handleConfirm}
@@ -215,7 +239,7 @@ export default function DataResetView({
         message={notice.message}
         onConfirm={() => setNotice(prev => ({ ...prev, open: false }))}
         lang={lang}
-        type="success"
+        type={notice.type === 'error' ? 'error' : 'success'}
       />
     </div>
   );
@@ -228,6 +252,7 @@ function ResetConfirmModal({
   records,
   agreed,
   confirmText,
+  isResetting,
   onAgreedChange,
   onConfirmTextChange,
   onConfirm,
@@ -239,13 +264,14 @@ function ResetConfirmModal({
   records: DataResetRecords;
   agreed: boolean;
   confirmText: string;
+  isResetting: boolean;
   onAgreedChange: (value: boolean) => void;
   onConfirmTextChange: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   const isRtl = lang === 'ar';
-  const canContinue = agreed && confirmText.trim().toLowerCase() === 'delete';
+  const canContinue = !isResetting && agreed && confirmText.trim().toLowerCase() === 'delete';
 
   return (
     <AnimatePresence>
@@ -337,7 +363,8 @@ function ResetConfirmModal({
               <button
                 type="button"
                 onClick={onCancel}
-                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                disabled={isResetting}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
               >
                 {lang === 'en' ? 'Cancel' : 'إلغاء'}
               </button>
@@ -347,7 +374,9 @@ function ResetConfirmModal({
                 onClick={onConfirm}
                 className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 disabled:bg-slate-300 disabled:cursor-not-allowed shadow-md shadow-rose-500/10 rounded-xl transition-colors cursor-pointer"
               >
-                {lang === 'en' ? 'Reset data' : 'إعادة تعيين البيانات'}
+                {isResetting
+                  ? (lang === 'en' ? 'Resetting…' : 'جاري إعادة التعيين…')
+                  : (lang === 'en' ? 'Reset data' : 'إعادة تعيين البيانات')}
               </button>
             </div>
           </motion.div>

@@ -15,7 +15,7 @@ import {
   Voucher,
   Warehouse,
 } from './types';
-import { initialChartOfAccounts, initialCompanies } from './utils';
+import { initialCompanies } from './utils';
 
 export interface DataResetTargetMeta {
   id: DataResetTargetId;
@@ -79,15 +79,15 @@ export const DATA_RESET_TARGETS: DataResetTargetMeta[] = [
     id: 'accounts',
     nameEn: 'Chart of accounts',
     nameAr: 'شجرة الحسابات',
-    descriptionEn: 'Restores the standard chart of accounts.',
-    descriptionAr: 'يعيد شجرة الحسابات القياسية.',
+    descriptionEn: 'Keeps all accounts, sets every balance to 0, and clears journal entries.',
+    descriptionAr: 'يبقي الحسابات، يصفر كل الأرصدة، ويمسح قيود اليومية.',
   },
   {
     id: 'journalEntries',
     nameEn: 'Journal entries',
     nameAr: 'قيود اليومية',
-    descriptionEn: 'Deletes ledger journals.',
-    descriptionAr: 'يحذف قيود دفتر الأستاذ.',
+    descriptionEn: 'Deletes ledger journals and zeros account balances.',
+    descriptionAr: 'يحذف قيود دفتر الأستاذ ويصفر أرصدة الحسابات.',
   },
   {
     id: 'vouchers',
@@ -283,7 +283,117 @@ export interface DataResetSetters {
   setReservedInvoices: Dispatch<SetStateAction<ReservedInvoiceNumber[]>>;
 }
 
+export type DataResetCurrentState = DataResetRecords & {
+  company: CompanyProfile;
+  reservedInvoices: ReservedInvoiceNumber[];
+};
+
+export type DataResetNextState = DataResetCurrentState;
+
+/** Builds post-reset state without seeding demo COA balances. */
+export function buildDataResetNextState(
+  selectedIds: DataResetTargetId[],
+  current: DataResetCurrentState,
+): DataResetNextState {
+  const selected = new Set(selectedIds);
+  const next: DataResetNextState = {
+    companies: current.companies,
+    company: current.company,
+    customers: current.customers,
+    suppliers: current.suppliers,
+    products: current.products,
+    warehouses: current.warehouses,
+    invoices: current.invoices,
+    reservedInvoices: current.reservedInvoices,
+    expenses: current.expenses,
+    accounts: current.accounts,
+    journalEntries: current.journalEntries,
+    vouchers: current.vouchers,
+    bankReconciliations: current.bankReconciliations,
+  };
+
+  if (selected.has('companies')) {
+    const restored = initialCompanies.map(company => ({ ...company }));
+    const active = restored[0];
+    if (active) {
+      next.companies = restored;
+      next.company = { ...active };
+    }
+  }
+  if (selected.has('customers')) next.customers = [];
+  if (selected.has('suppliers')) next.suppliers = [];
+  if (selected.has('products')) next.products = [];
+  if (selected.has('warehouses')) next.warehouses = [];
+  if (selected.has('invoices')) {
+    next.invoices = [];
+    next.reservedInvoices = [];
+  }
+  if (selected.has('expenses')) next.expenses = [];
+  // Keep COA structure; zero balances and clear journals (no seed balances)
+  if (selected.has('accounts') || selected.has('journalEntries')) {
+    next.accounts = current.accounts.map(account => ({ ...account, balance: 0 }));
+    next.journalEntries = [];
+  }
+  if (selected.has('vouchers')) next.vouchers = [];
+  if (selected.has('bankReconciliations')) next.bankReconciliations = [];
+
+  return next;
+}
+
+export function dataResetSyncJobs(
+  selectedIds: DataResetTargetId[],
+  next: DataResetNextState,
+): { table: string; rows: Record<string, unknown>[] }[] {
+  const selected = new Set(selectedIds);
+  const jobs: { table: string; rows: Record<string, unknown>[] }[] = [];
+
+  if (selected.has('companies')) {
+    jobs.push({ table: 'companies', rows: next.companies as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('customers')) {
+    jobs.push({ table: 'customers', rows: next.customers as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('suppliers')) {
+    jobs.push({ table: 'suppliers', rows: next.suppliers as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('products')) {
+    jobs.push({ table: 'products', rows: next.products as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('warehouses')) {
+    jobs.push({ table: 'warehouses', rows: next.warehouses as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('invoices')) {
+    jobs.push({ table: 'invoices', rows: next.invoices as unknown as Record<string, unknown>[] });
+    jobs.push({
+      table: 'reserved_invoices',
+      rows: next.reservedInvoices as unknown as Record<string, unknown>[],
+    });
+  }
+  if (selected.has('expenses')) {
+    jobs.push({ table: 'expenses', rows: next.expenses as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('accounts') || selected.has('journalEntries')) {
+    jobs.push({ table: 'accounts', rows: next.accounts as unknown as Record<string, unknown>[] });
+    jobs.push({
+      table: 'journal_entries',
+      rows: next.journalEntries as unknown as Record<string, unknown>[],
+    });
+  }
+  if (selected.has('vouchers')) {
+    jobs.push({ table: 'vouchers', rows: next.vouchers as unknown as Record<string, unknown>[] });
+  }
+  if (selected.has('bankReconciliations')) {
+    jobs.push({
+      table: 'bank_reconciliations',
+      rows: next.bankReconciliations as unknown as Record<string, unknown>[],
+    });
+  }
+
+  return jobs;
+}
+
 export function applyDataReset(selectedIds: DataResetTargetId[], setters: DataResetSetters): void {
+  // Functional updates so COA keep list and only zero balances (no seed restore)
   const selected = new Set(selectedIds);
 
   if (selected.has('companies')) {
@@ -303,10 +413,10 @@ export function applyDataReset(selectedIds: DataResetTargetId[], setters: DataRe
     setters.setReservedInvoices([]);
   }
   if (selected.has('expenses')) setters.setExpenses([]);
-  if (selected.has('accounts')) {
-    setters.setAccounts(initialChartOfAccounts.map(account => ({ ...account })));
+  if (selected.has('accounts') || selected.has('journalEntries')) {
+    setters.setAccounts(prev => prev.map(account => ({ ...account, balance: 0 })));
+    setters.setJournalEntries([]);
   }
-  if (selected.has('journalEntries')) setters.setJournalEntries([]);
   if (selected.has('vouchers')) setters.setVouchers([]);
   if (selected.has('bankReconciliations')) setters.setBankReconciliations([]);
 }
