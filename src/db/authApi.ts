@@ -23,13 +23,21 @@ export type UserWriteInput = {
 };
 
 async function readApiError(res: Response, fallback: string): Promise<string> {
-  const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    return `${fallback} (HTTP ${res.status}). Is the app server running?`;
+  const raw = await res.text().catch(() => '');
+  try {
+    const body = JSON.parse(raw) as { error?: unknown; detail?: unknown };
+    if (typeof body.error === 'string' && body.error.trim()) {
+      return typeof body.detail === 'string' && body.detail.trim()
+        ? `${body.error} ${body.detail}`
+        : body.error;
+    }
+  } catch {
+    // non-JSON body from platform crash page
   }
-  const body = await res.json().catch(() => ({} as { error?: unknown }));
-  if (typeof body.error === 'string' && body.error.trim()) return body.error;
-  return `${fallback} (HTTP ${res.status}).`;
+  if (raw && raw.length < 240 && !raw.trimStart().startsWith('<')) {
+    return `${fallback}: ${raw.trim()}`;
+  }
+  return `${fallback} (HTTP ${res.status}). Check Vercel function logs and env vars (SUPABASE_SERVICE_ROLE_KEY).`;
 }
 
 export async function createUserAccount(input: UserWriteInput): Promise<AuthUser> {

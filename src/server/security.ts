@@ -5,7 +5,8 @@ import { getAppUrl, getSupabaseUrl, isProduction } from './env';
 
 export function applySecurityMiddleware(app: Express): void {
   app.disable('x-powered-by');
-  app.set('trust proxy', 1);
+  // Vercel sits behind multiple proxies; `true` avoids express-rate-limit ValidationError 500s
+  app.set('trust proxy', process.env.VERCEL ? true : 1);
 
   const appUrl = getAppUrl();
   const supabaseUrl = getSupabaseUrl();

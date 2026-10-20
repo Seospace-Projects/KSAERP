@@ -8,29 +8,32 @@ function tooMany(message: string) {
   };
 }
 
-/** Login / username lookup: 20 attempts per minute per IP (device switches included). */
-export const loginLimiter = rateLimit({
+/** Vercel / proxies send multi-hop X-Forwarded-For; disable validations that throw 500s. */
+const serverlessSafe = {
   windowMs: 60 * 1000,
-  limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false as const,
+};
+
+/** Login / username lookup: 20 attempts per minute per IP (device switches included). */
+export const loginLimiter = rateLimit({
+  ...serverlessSafe,
+  limit: 20,
   handler: tooMany('Too many sign-in attempts. Try again in a minute.'),
 });
 
 /** Password reset: 3 attempts per hour per IP. */
 export const passwordResetLimiter = rateLimit({
+  ...serverlessSafe,
   windowMs: 60 * 60 * 1000,
   limit: 3,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: tooMany('Too many password reset attempts. Try again later.'),
 });
 
 /** Authenticated user-create (signup): 10 per minute per IP. */
 export const signupLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  ...serverlessSafe,
   limit: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
   handler: tooMany('Too many account requests. Try again in a minute.'),
 });
