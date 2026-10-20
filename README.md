@@ -31,7 +31,7 @@ The frontend is Vite static assets; `/api/*` is served by the Express app in `ap
    - `APP_URL` = your Vercel URL, e.g. `https://your-app.vercel.app`
    - `GEMINI_API_KEY` (optional locally; needed for `/api/translate`)
 3. Redeploy. Confirm `GET /api/health` returns JSON like `{ "ok": true, "hasServiceRole": true }`.
-4. The API is bundled at build time into `api/index.mjs` (`npm run build:api`).
+4. Build runs `npm run build:api`, which writes `api/handler.mjs`. The committed entry is `api/index.ts`.
 
 ## Environment variables
 

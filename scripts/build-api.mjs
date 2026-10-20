@@ -1,13 +1,11 @@
 /**
- * Bundle the Express API into a single ESM file for Vercel.
- * Relative TS imports under /api crash on Vercel with "type": "module".
+ * Bundle the Express API for Vercel into api/handler.mjs.
+ * api/index.ts is the committed Serverless entry that imports this file.
  */
 import * as esbuild from 'esbuild';
-import { mkdirSync, writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 
 mkdirSync('api', { recursive: true });
-
-const outfile = 'api/index.mjs';
 
 await esbuild.build({
   entryPoints: ['src/server/vercelEntry.ts'],
@@ -15,7 +13,7 @@ await esbuild.build({
   platform: 'node',
   target: 'node20',
   format: 'esm',
-  outfile,
+  outfile: 'api/handler.mjs',
   external: ['@google/genai'],
   logLevel: 'info',
   banner: {
@@ -23,22 +21,4 @@ await esbuild.build({
   },
 });
 
-// Remove stale CJS placeholder if present (avoids dual handlers)
-for (const stale of ['api/index.cjs', 'api/index.js']) {
-  if (existsSync(stale)) {
-    try {
-      unlinkSync(stale);
-    } catch {
-      // ignore
-    }
-  }
-}
-
-// Tiny CJS re-export kept only if some tooling looks for .cjs — prefer .mjs as the Vercel entry
-writeFileSync(
-  'api/package.json',
-  `${JSON.stringify({ type: 'module' }, null, 2)}\n`,
-  'utf8',
-);
-
-console.log(`Wrote ${outfile}`);
+console.log('Wrote api/handler.mjs');
