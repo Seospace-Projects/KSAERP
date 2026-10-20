@@ -57,6 +57,10 @@ async function requireUserManager(
   if (profile.role_id === 'super_admin') {
     return { admin, userId: data.user.id, isSuperAdmin: true };
   }
+  // Company Admin can manage users even if older DB role JSON omitted platform.users
+  if (profile.role_id === 'admin') {
+    return { admin, userId: data.user.id, isSuperAdmin: false };
+  }
   const { data: role, error: roleError } = await admin
     .from('roles')
     .select('permissions')
@@ -123,6 +127,25 @@ function toUser(row: Record<string, unknown>) {
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at || undefined,
   };
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object' && 'message' in err) return String((err as { message: unknown }).message);
+  return String(err || '');
+}
+
+function createUserPublicError(err: unknown): string {
+  const msg = errorMessage(err).toLowerCase();
+  if (msg.includes('already been registered') || msg.includes('already exists') || msg.includes('duplicate key')) {
+    if (msg.includes('username')) return 'This username is already taken.';
+    if (msg.includes('email')) return 'A user with this email already exists.';
+    return 'Username or email is already in use.';
+  }
+  if (msg.includes('password')) return 'Password does not meet authentication requirements.';
+  if (msg.includes('foreign key') || msg.includes('role_id')) return 'Selected role was not found.';
+  if (msg.includes('invalid') && msg.includes('email')) return 'Email address is invalid.';
+  return 'Could not create user.';
 }
 
 export function registerAuthRoutes(app: Express): void {
@@ -268,11 +291,15 @@ export function registerAuthRoutes(app: Express): void {
     try {
       const body = req.body || {};
       const username = String(body.username || '').trim().toLowerCase();
-      const email = String(body.email || '').trim() || `${username}@ksa-erp.sa`;
+      const email = (String(body.email || '').trim() || `${username}@ksa-erp.sa`).toLowerCase();
       const password = String(body.password || '');
       const roleId = String(body.roleId || body.role_id || 'viewer');
       if (!username || !body.nameEn) {
         sendPublicError(res, 400, 'Username and English name are required.');
+        return;
+      }
+      if (!/^[a-z0-9._-]+$/.test(username)) {
+        sendPublicError(res, 400, 'Username may only contain letters, numbers, dots, underscores, or hyphens.');
         return;
       }
       if (!password) {
@@ -283,6 +310,30 @@ export function registerAuthRoutes(app: Express): void {
         sendPublicError(res, 403, 'Only Super Admin can create Super Admin accounts.');
         return;
       }
+
+      const { data: roleRow, error: roleLookupError } = await ctx.admin
+        .from('roles')
+        .select('id')
+        .eq('id', roleId)
+        .maybeSingle();
+      if (roleLookupError || !roleRow) {
+        sendPublicError(res, 400, 'Selected role was not found.', roleLookupError, 'auth.createUser.role');
+        return;
+      }
+
+      const [{ data: byUsername }, { data: byEmail }] = await Promise.all([
+        ctx.admin.from('profiles').select('id').eq('username', username).maybeSingle(),
+        ctx.admin.from('profiles').select('id').eq('email', email).maybeSingle(),
+      ]);
+      if (byUsername) {
+        sendPublicError(res, 400, 'This username is already taken.');
+        return;
+      }
+      if (byEmail) {
+        sendPublicError(res, 400, 'A user with this email already exists.');
+        return;
+      }
+
       const created = await ctx.admin.auth.admin.createUser({
         email,
         password,
@@ -290,22 +341,22 @@ export function registerAuthRoutes(app: Express): void {
         user_metadata: { username },
       });
       if (created.error || !created.data.user) {
-        sendPublicError(res, 400, 'Could not create user.', created.error, 'auth.createUser');
+        sendPublicError(res, 400, createUserPublicError(created.error), created.error, 'auth.createUser');
         return;
       }
       const row = profileRow(created.data.user.id, { ...body, username, email, roleId });
       const { data, error } = await ctx.admin.from('profiles').upsert({
         ...row,
         created_at: new Date().toISOString(),
-      }).select('*').single();
+      }, { onConflict: 'id' }).select('*').single();
       if (error) {
         await ctx.admin.auth.admin.deleteUser(created.data.user.id);
-        sendPublicError(res, 400, 'Could not create user.', error, 'auth.createProfile');
+        sendPublicError(res, 400, createUserPublicError(error), error, 'auth.createProfile');
         return;
       }
       res.json({ user: toUser(data as Record<string, unknown>) });
     } catch (err) {
-      sendPublicError(res, 500, 'Could not create user.', err, 'auth.createUser');
+      sendPublicError(res, 500, createUserPublicError(err), err, 'auth.createUser');
     }
   });
 

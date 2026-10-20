@@ -22,15 +22,26 @@ export type UserWriteInput = {
   password?: string;
 };
 
+async function readApiError(res: Response, fallback: string): Promise<string> {
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return `${fallback} (HTTP ${res.status}). Is the app server running?`;
+  }
+  const body = await res.json().catch(() => ({} as { error?: unknown }));
+  if (typeof body.error === 'string' && body.error.trim()) return body.error;
+  return `${fallback} (HTTP ${res.status}).`;
+}
+
 export async function createUserAccount(input: UserWriteInput): Promise<AuthUser> {
   const res = await fetch('/api/auth/users', {
     method: 'POST',
     headers: await authHeaders(),
     body: JSON.stringify(input),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to create user.');
-  return body.user as AuthUser;
+  if (!res.ok) throw new Error(await readApiError(res, 'Failed to create user'));
+  const body = await res.json().catch(() => ({} as { user?: AuthUser }));
+  if (!body.user) throw new Error('Failed to create user: empty response.');
+  return body.user;
 }
 
 export async function updateUserAccount(id: string, input: UserWriteInput): Promise<AuthUser> {
@@ -39,9 +50,10 @@ export async function updateUserAccount(id: string, input: UserWriteInput): Prom
     headers: await authHeaders(),
     body: JSON.stringify(input),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to update user.');
-  return body.user as AuthUser;
+  if (!res.ok) throw new Error(await readApiError(res, 'Failed to update user'));
+  const body = await res.json().catch(() => ({} as { user?: AuthUser }));
+  if (!body.user) throw new Error('Failed to update user: empty response.');
+  return body.user;
 }
 
 export async function deleteUserAccount(id: string): Promise<void> {
@@ -49,6 +61,5 @@ export async function deleteUserAccount(id: string): Promise<void> {
     method: 'DELETE',
     headers: await authHeaders(),
   });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || 'Failed to delete user.');
+  if (!res.ok) throw new Error(await readApiError(res, 'Failed to delete user'));
 }

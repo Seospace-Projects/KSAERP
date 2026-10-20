@@ -50,8 +50,9 @@ const PLATFORM_PERMISSIONS: Permission[] = [
   'platform.schema',
 ];
 
+/** Company Admin may manage users (not Super Admin accounts). Other platform keys stay Super Admin only. */
 const ADMIN_EXCLUDED_PERMISSIONS: Permission[] = [
-  ...PLATFORM_PERMISSIONS,
+  ...PLATFORM_PERMISSIONS.filter(p => p !== 'platform.users'),
   'dataReset.execute',
 ];
 
@@ -339,8 +340,11 @@ export function hydrateRoles(roles: Role[]): Role[] {
     if (role.id === 'super_admin') {
       return { ...role, permissions: ALL_PERMISSION_IDS };
     }
-    if (role.id === 'admin' && !role.permissions.includes('sales.reserved.view')) {
-      return { ...role, permissions: [...role.permissions, 'sales.reserved.view'] };
+    if (role.id === 'admin') {
+      const next = new Set(role.permissions);
+      next.add('sales.reserved.view');
+      next.add('platform.users');
+      return { ...role, permissions: Array.from(next) as Permission[] };
     }
     return role;
   });
