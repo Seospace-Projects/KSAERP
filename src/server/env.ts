@@ -48,6 +48,8 @@ export function isSupabaseAdminConfigured(): boolean {
 }
 
 export function assertRequiredEnv(): void {
+  // Used by local `server.ts` only. Vercel `api/index.ts` validates per-request (503).
+  if (process.env.VERCEL) return;
   const missing: string[] = [];
   if (!getSupabaseUrl()) missing.push('SUPABASE_URL (or VITE_SUPABASE_URL)');
   if (!getSupabaseAnonKey()) missing.push('VITE_SUPABASE_ANON_KEY');

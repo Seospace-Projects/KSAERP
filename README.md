@@ -18,6 +18,20 @@ View in AI Studio: https://ai.studio/apps/1ab5e18a-58ca-43e1-ae04-6ec383cae071
 4. Seed Auth users: `npm run seed:auth`
 5. Start the app: `npm run dev`
 
+## Deploy on Vercel
+
+The frontend is Vite static assets; `/api/*` is served by the Express app in `api/index.ts`.
+
+1. Import the GitHub repo in Vercel (Vite preset / `vercel.json` is already configured).
+2. In **Project → Settings → Environment Variables**, set at least:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `SUPABASE_URL` (same as project URL)
+   - `SUPABASE_SERVICE_ROLE_KEY` (**required** for user create/login API)
+   - `APP_URL` = your Vercel URL, e.g. `https://your-app.vercel.app`
+   - `GEMINI_API_KEY` (optional locally; needed for `/api/translate`)
+3. Redeploy. Confirm `GET /api/health` returns `{ "ok": true }`.
+
 ## Environment variables
 
 | Variable | Where it is used | Public? |
