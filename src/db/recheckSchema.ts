@@ -112,5 +112,7 @@ export function writeSchemaFromRegistry(rootDir: string): string {
 }
 
 export function projectRootFromThisFile(): string {
+  // Prefer cwd (Vercel / local). Avoid import.meta so CJS serverless bundles work.
+  if (typeof process !== 'undefined' && process.cwd) return process.cwd();
   return join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 }

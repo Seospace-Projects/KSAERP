@@ -1,5 +1,5 @@
-import { rateLimit } from 'express-rate-limit';
-import type { Request, Response } from 'express';
+import { rateLimit, type RateLimitRequestHandler } from 'express-rate-limit';
+import type { NextFunction, Request, Response } from 'express';
 import { sendPublicError } from './http';
 
 function tooMany(message: string) {
@@ -7,6 +7,13 @@ function tooMany(message: string) {
     sendPublicError(res, 429, message);
   };
 }
+
+const passthrough: RateLimitRequestHandler = ((_req: Request, _res: Response, next: NextFunction) => {
+  next();
+}) as RateLimitRequestHandler;
+
+/** Skip in-memory rate limits on Vercel (per-instance; also avoid proxy ValidationError crashes). */
+const onVercel = Boolean(process.env.VERCEL);
 
 /** Vercel / proxies send multi-hop X-Forwarded-For; disable validations that throw 500s. */
 const serverlessSafe = {
@@ -17,23 +24,29 @@ const serverlessSafe = {
 };
 
 /** Login / username lookup: 20 attempts per minute per IP (device switches included). */
-export const loginLimiter = rateLimit({
-  ...serverlessSafe,
-  limit: 20,
-  handler: tooMany('Too many sign-in attempts. Try again in a minute.'),
-});
+export const loginLimiter = onVercel
+  ? passthrough
+  : rateLimit({
+      ...serverlessSafe,
+      limit: 20,
+      handler: tooMany('Too many sign-in attempts. Try again in a minute.'),
+    });
 
 /** Password reset: 3 attempts per hour per IP. */
-export const passwordResetLimiter = rateLimit({
-  ...serverlessSafe,
-  windowMs: 60 * 60 * 1000,
-  limit: 3,
-  handler: tooMany('Too many password reset attempts. Try again later.'),
-});
+export const passwordResetLimiter = onVercel
+  ? passthrough
+  : rateLimit({
+      ...serverlessSafe,
+      windowMs: 60 * 60 * 1000,
+      limit: 3,
+      handler: tooMany('Too many password reset attempts. Try again later.'),
+    });
 
 /** Authenticated user-create (signup): 10 per minute per IP. */
-export const signupLimiter = rateLimit({
-  ...serverlessSafe,
-  limit: 10,
-  handler: tooMany('Too many account requests. Try again in a minute.'),
-});
+export const signupLimiter = onVercel
+  ? passthrough
+  : rateLimit({
+      ...serverlessSafe,
+      limit: 10,
+      handler: tooMany('Too many account requests. Try again in a minute.'),
+    });

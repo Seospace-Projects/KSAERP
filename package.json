@@ -5,10 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && npm run build:api && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build:api": "node scripts/build-api.mjs",
     "start": "cross-env NODE_ENV=production node dist/server.cjs",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist server.js api/index.mjs api/index.cjs api/package.json",
     "lint": "tsc --noEmit",
     "schema:write": "tsx src/db/writeSchemaFile.ts",
     "seed:auth": "tsx scripts/seed-auth-users.ts"

@@ -5,6 +5,12 @@ coverage/
 .DS_Store
 *.log
 
+# Generated Vercel serverless bundle (created by npm run build:api)
+api/index.mjs
+api/index.cjs
+api/index.js
+api/package.json
+
 # Secrets — never commit real env files
 .env
 .env.*

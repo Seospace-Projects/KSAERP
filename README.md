@@ -30,7 +30,8 @@ The frontend is Vite static assets; `/api/*` is served by the Express app in `ap
    - `SUPABASE_SERVICE_ROLE_KEY` (**required** for user create/login API)
    - `APP_URL` = your Vercel URL, e.g. `https://your-app.vercel.app`
    - `GEMINI_API_KEY` (optional locally; needed for `/api/translate`)
-3. Redeploy. Confirm `GET /api/health` returns `{ "ok": true }`.
+3. Redeploy. Confirm `GET /api/health` returns JSON like `{ "ok": true, "hasServiceRole": true }`.
+4. The API is bundled at build time into `api/index.mjs` (`npm run build:api`).
 
 ## Environment variables
 
