@@ -935,22 +935,61 @@ export default function SalesInvoiceView({
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Tajawal:wght@400;500;700;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cairo:wght@400;600;700&display=swap');
             * { box-sizing: border-box; }
-            body {
+            html, body {
               font-family: 'Inter', 'Tajawal', 'Cairo', sans-serif;
               margin: 0; padding: 0; background: #ffffff; color: #0f172a;
               -webkit-print-color-adjust: exact !important;
               print-color-adjust: exact !important;
             }
             .font-serif-elegant { font-family: 'Playfair Display', Georgia, serif !important; }
+
+            /*
+              Print/PDF: browser @page margins keep content off the edges.
+              Footer is absolutely pinned to the bottom of the first A4 page
+              (print engines often ignore flex margin-top:auto).
+            */
+            @page {
+              size: A4 portrait;
+              margin: 15mm;
+            }
+            #printable-a4-area {
+              position: relative !important;
+              width: 100% !important;
+              max-width: 100% !important;
+              /* Printable area inside 15mm page margins ≈ 267mm tall */
+              min-height: 267mm !important;
+              height: 267mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              display: block !important;
+              background: #ffffff;
+              border: none !important;
+              box-shadow: none !important;
+              overflow: visible !important;
+            }
+            #printable-a4-area .invoice-body {
+              display: block;
+              /* Reserve space only for sticky page footer (not totals) */
+              padding-bottom: 42mm !important;
+            }
+            #printable-a4-area .invoice-footer {
+              position: absolute !important;
+              left: 0 !important;
+              right: 0 !important;
+              bottom: 0 !important;
+              width: 100% !important;
+              margin: 0 !important;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+            }
             @media print {
-              @page { size: A4 portrait; margin: 12mm 15mm 12mm 15mm; }
-              body { background: #ffffff; }
+              html, body { width: auto; height: auto; margin: 0; padding: 0; }
               #printable-a4-area {
-                min-height: 0 !important; height: auto !important; padding: 0 !important;
-                border: none !important; box-shadow: none !important;
-                max-width: 100% !important; width: 100% !important;
+                min-height: 267mm !important;
+                height: 267mm !important;
               }
-              table { page-break-inside: avoid; }
+              table { page-break-inside: auto; }
+              thead { display: table-header-group; }
               tr { page-break-inside: avoid; }
             }
           </style>
@@ -959,7 +998,30 @@ export default function SalesInvoiceView({
           ${printContent.innerHTML}
           <script>
             window.onload = function() {
-              setTimeout(function() { window.print(); window.close(); }, 500);
+              var sheet = document.getElementById('printable-a4-area');
+              var footer = document.querySelector('.invoice-footer');
+              var body = document.querySelector('.invoice-body');
+              if (sheet) {
+                sheet.style.position = 'relative';
+                sheet.style.minHeight = '267mm';
+                sheet.style.height = '267mm';
+                sheet.style.width = '100%';
+                sheet.style.padding = '0';
+                sheet.style.margin = '0';
+                sheet.style.display = 'block';
+              }
+              if (body) {
+                body.style.paddingBottom = '42mm';
+              }
+              if (footer) {
+                footer.style.position = 'absolute';
+                footer.style.left = '0';
+                footer.style.right = '0';
+                footer.style.bottom = '0';
+                footer.style.width = '100%';
+                footer.style.marginTop = '0';
+              }
+              setTimeout(function() { window.print(); window.close(); }, 700);
             }
           <\/script>
         </body>
@@ -2003,15 +2065,15 @@ export default function SalesInvoiceView({
                 </div>
               </div>
 
-              <div className={showPreviewModal ? 'overflow-y-auto p-4 bg-slate-100/80' : ''}>
+              <div className={showPreviewModal ? 'overflow-y-auto p-4 bg-slate-100/80 flex justify-center' : ''}>
 
-            {/* A4 Container */}
+            {/* Exact A4 preview — 15mm safe margins; footer pinned to page bottom */}
             <div 
               id="printable-a4-area" 
-              className={`p-5 text-slate-800 text-[10px] relative flex flex-col justify-between min-h-[700px] shadow-xs duration-300 transition-all bg-white ${tpl.container}`}
+              className={`text-slate-800 text-[10px] relative flex flex-col w-[210mm] min-h-[297mm] max-w-[210mm] mx-auto p-[15mm] box-border shadow-xs duration-300 transition-all bg-white ${tpl.container}`}
               dir={designerLanguage === 'ar' ? 'rtl' : 'ltr'}
             >
-              <div>
+              <div className="invoice-body shrink-0 pb-[42mm]">
                 {/* HEADER AREA */}
                 <div className="grid grid-cols-12 gap-4 pb-4 border-b border-slate-200 items-start">
                   {/* Top Left QR Position */}
@@ -2206,12 +2268,9 @@ export default function SalesInvoiceView({
                     </tbody>
                   </table>
                 </div>
-              </div>
 
-              <div>
-                {/* BOTTOM SUMMARY & BANK DETAILS SECTION */}
-                <div className="grid grid-cols-12 gap-4 py-3 border-t border-slate-200 items-start">
-                  {/* Bank Account details (Left) */}
+                {/* TOTALS + BANK — directly after line items (not sticky) */}
+                <div className="grid grid-cols-12 gap-4 mt-8 pt-3 border-t border-slate-200 items-start">
                   {designerShowBankDetails ? (
                     <div className={`${
                       designerQrPos === 'bottom-left' 
@@ -2252,14 +2311,12 @@ export default function SalesInvoiceView({
                     }`} />
                   )}
 
-                  {/* Bottom Left QR position option */}
                   {designerQrPos === 'bottom-left' && (
                     <div className="col-span-3 flex justify-center pt-2">
                       {renderQrCode("w-16 h-16")}
                     </div>
                   )}
 
-                  {/* Financial Summary (Right) */}
                   <div className={`${
                     designerQrPos === 'bottom-left' 
                       ? 'col-span-5' 
@@ -2288,7 +2345,6 @@ export default function SalesInvoiceView({
                       <span className="font-mono text-xs">{selectedInvoice.total.toFixed(2)} SAR</span>
                     </div>
 
-                    {/* Return reason if applicable */}
                     {selectedInvoice.isReturned && (
                       <div className="bg-rose-50 p-1 rounded-lg text-rose-800 text-[8px] text-start mt-1">
                         <strong>{designerLanguage === 'ar' ? 'سبب الإرجاع: ' : 'Return Reason: '}</strong>
@@ -2297,24 +2353,24 @@ export default function SalesInvoiceView({
                     )}
                   </div>
 
-                  {/* Bottom Right QR position option */}
                   {designerQrPos === 'bottom-right' && (
                     <div className="col-span-3 flex justify-end pt-2">
                       {renderQrCode("w-16 h-16")}
                     </div>
                   )}
                 </div>
+              </div>
 
-                {/* Centered Footer QR position option */}
+              {/* PAGE FOOTER ONLY — sticky to bottom of A4 */}
+              <div className="invoice-footer absolute bottom-[15mm] left-[15mm] right-[15mm]">
                 {designerQrPos === 'footer' && (
-                  <div className="my-2 flex justify-center">
+                  <div className="mb-2 flex justify-center">
                     {renderQrCode("w-14 h-14")}
                   </div>
                 )}
 
-                {/* SYSTEM GENERATED ELECTRONIC NOTICE */}
                 {designerShowNotice && (
-                  <div className="mt-3 p-2 bg-slate-50 border border-slate-200 rounded-xl text-center text-[8.5px] text-slate-500 space-y-0.5 leading-normal">
+                  <div className="p-2 bg-slate-50 border border-slate-200 rounded-xl text-center text-[8.5px] text-slate-500 space-y-0.5 leading-normal">
                     <div className="font-extrabold text-slate-700 flex items-center justify-center gap-1.5">
                       <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                       {designerLanguage === 'ar' 
@@ -2333,8 +2389,7 @@ export default function SalesInvoiceView({
                   </div>
                 )}
 
-                {/* FOOTER */}
-                <div className="mt-3 pt-2 border-t border-slate-200 flex justify-center items-center text-[8.5px] text-slate-400 text-center w-full">
+                <div className="mt-2 pt-2 border-t border-slate-200 flex justify-center items-center text-[8.5px] text-slate-400 text-center w-full">
                   <div className="space-y-0.5 max-w-[500px] mx-auto font-medium">
                     {invCompany.invoiceFooterEn && <div>{invCompany.invoiceFooterEn}</div>}
                     {invCompany.invoiceFooterAr && <div>{invCompany.invoiceFooterAr}</div>}
